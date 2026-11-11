@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="UTF-8" /><title>Browser smoke harness</title>
+<style>body{background:#111;color:#0f0;font:14px monospace;padding:16px;} #status{white-space:pre-wrap;color:#7df;}</style>
+</head>
+<body>
+<h1>PIXEL VICE CITY — headless browser smoke</h1>
+<pre id="status">booting…</pre>
+<!-- same DOM ids as the real game HUD -->
+<canvas id="game" width="600" height="400"></canvas>
+<div id="flash"></div>
+<div id="crosshair"><div class="dot"></div></div>
+<div id="healthBox"><div id="healthBar"><div id="healthFill"></div></div><div id="wantedBox"></div></div>
+<div id="heldBox"><span id="heldIcon">✊</span><span id="heldName">TAY</span></div>
+<div id="weaponBox"><span class="wslot" data-w="0"></span></div>
+<div id="ammoBox"><span id="ammoN">—</span><span id="shotsN">0</span><div id="reloadN"></div></div>
+<div id="speedBox" class="hidden"><span id="speedN">0</span></div>
+<div id="msg"></div><div id="hint"></div>
+<div id="minimapBox"><canvas id="minimap" width="150" height="150"></canvas></div>
+<div id="startOverlay" class="overlay"><button id="startBtn">start</button></div>
+<div id="wasted" class="overlay hidden"><button id="respawnBtn">respawn</button></div>
+<pre id="status2"></pre>
+<script>
+  window.__bootErrors = [];
+  window.addEventListener('error', e => window.__bootErrors.push(String(e.message || e)));
+  window.addEventListener('unhandledrejection', e => window.__bootErrors.push('promise: ' + String(e.reason)));
+  window.__frames = 0;
+  const _raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = (cb) => _raf((t) => { window.__frames++; cb(t); });
+</script>
+<script src="../lib/three.min.js"></script>
+<script>
+  // no GL in this container: stub the renderer but keep the whole game logic real
+  THREE.WebGLRenderer = function (opts) {
+    this.domElement = opts && opts.canvas;
+    this.setPixelRatio = () => {};
+    this.setSize = () => {};
+    this.render = (sc) => { sc.updateMatrixWorld(true); };
+  };
+</script>
+<script src="../js/game.js"></script>
+<script>
+  (function () {
+    const status = document.getElementById('status');
+    document.getElementById('startBtn').addEventListener('click', () => {
+      setTimeout(() => {
+        try {
+          const G = window.__GTA__;
+          const mm = document.getElementById('minimap');
+          let mmInk = 0;
+          try {
+            const ctx = mm.getContext('2d');
+            const d = ctx.getImageData(0, 0, mm.width, mm.height).data;
+            for (let i = 0; i < d.length; i += 4) if (d[i] + d[i + 1] + d[i + 2] > 30) mmInk++;
+          } catch (e) { mmInk = 'err:' + e.message; }
+          status.textContent = JSON.stringify({
+            errors: window.__bootErrors,
+            gta: !!G,
+            player: !!(G && G.player),
+            cam: G ? G.cameraState : null,
+            overlayHidden: document.getElementById('startOverlay').classList.contains('hidden'),
+            frames: window.__frames,
+            minimapInkPixels: mmInk,
+            cars: G ? G.cars.length : 0,
+            npcs: G ? G.NPCs.length : 0
+          }, null, 1);
+        } catch (e) { status.textContent = 'STATUS ERROR: ' + e.message + '\n' + e.stack; }
+      }, 2500);
+    });
+    document.getElementById('startBtn').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  })();
+</script>
+</body>
+</html>
