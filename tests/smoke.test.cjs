@@ -667,5 +667,73 @@ let rigPrints = 0;
 G.NPCs.forEach(n => { const m = n.group.userData.body && n.group.userData.body.material; if (m && m.map) rigPrints++; });
 check('some pedestrians wear tropical print shirts (' + rigPrints + ')', rigPrints >= 3);
 
+
+/* ================= TEST 24: on-foot feel + car entry polish ==================== */
+G.respawn();
+G.NPCs.forEach(n => { n.pos.set(400, 0, 400); n.group.position.set(400, 0, 400); });
+G.cars.forEach(c => {
+  if (c.dead) return;
+  c.driver = null;
+  c.pos.set(420, 0, 420);
+  c.prevPos.copy(c.pos);
+  c.group.position.copy(c.pos);
+  c.curSpeed = 0;
+});
+G.setCameraLook(0, -0.17); G.snapCamera(); step(2);
+player.vel.set(0, 0, 0);                 // G.respawn already placed the hero at SPAWN
+step(2);
+key('KeyW'); step(4);
+const vEarly = Math.hypot(player.vel.x, player.vel.z);
+check('on foot accelerates from rest (v=' + vEarly.toFixed(2) + ' u/s)', vEarly > 0.3 && vEarly < 5.5);
+step(22);
+const vFull = Math.hypot(player.vel.x, player.vel.z);
+check('reaches full walking speed (' + vFull.toFixed(2) + ' u/s)', vFull > 5.8);
+keyup('KeyW'); step(22);
+check('brakes smoothly to a stop', Math.hypot(player.vel.x, player.vel.z) < 0.2);
+
+G.respawn();
+let wallB = null;
+for (const b of G.buildingBoxes) {
+  if (b.h < 30) continue;
+  let clear = true;
+  for (const o of G.buildingBoxes) {
+    if (o === b) continue;
+    if (o.maxX > b.cx - 1 && o.minX < b.cx + 1 && o.maxZ > b.minZ - 4.5 && o.minZ < b.minZ + 1) { clear = false; break; }
+  }
+  if (clear) { wallB = b; break; }
+}
+if (!wallB) wallB = G.buildingBoxes.reduce((a, b) => (a.h > b.h ? a : b));
+player.pos.set(wallB.cx, 0, wallB.minZ - 3);
+while (G.isInsideBuilding(player.pos.x, player.pos.z)) player.pos.z -= 2;
+player.group.position.copy(player.pos);
+G.setCameraLook(0, -0.17); G.snapCamera(); step(2);
+player.vel.set(0, 0, 0);
+key('KeyW'); step(45); keyup('KeyW');
+const wallGap = wallB.minZ - player.pos.z;
+check('hero stops at the wall with body clearance (gap ' + wallGap.toFixed(2) + ' m)',
+  wallGap > 0.2 && wallGap < 1.6 && !G.isInsideBuilding(player.pos.x, player.pos.z));
+
+G.respawn();
+player.wanted = 0;
+let entryCar = G.cars.find(c => !c.dead);
+if (!entryCar) entryCar = G.spawnCruiser();
+entryCar.dead = false; entryCar.stolen = false; entryCar.driver = null;
+entryCar.driverMesh = null; entryCar.maxSpeed = 9.5; entryCar.curSpeed = 0; entryCar.laneOffset = 0;
+entryCar.heading = Math.PI / 2;
+entryCar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
+entryCar.group.position.copy(entryCar.pos);
+step(2);
+check('near-car prompt appears ("' + els.carPrompt.textContent + '")', els.carPrompt.textContent.indexOf('XE') >= 0);
+key('KeyE');
+check('E enters the car', player.inCar === entryCar);
+check('camera aligns behind the car heading', Math.abs(G.cameraState.yaw - entryCar.heading) < 1e-6);
+key('KeyE');
+check('E exits beside a safe door',
+  player.inCar === null && !G.isInsideBuilding(player.pos.x, player.pos.z) &&
+  player.pos.distanceTo(entryCar.pos) > 1.2 && player.pos.distanceTo(entryCar.pos) < 4.5);
+const parked = entryCar.pos.clone();
+step(60);
+check('stolen car stays parked where the hero left it', entryCar.pos.distanceTo(parked) < 0.5);
+
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

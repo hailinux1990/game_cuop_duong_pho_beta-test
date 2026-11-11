@@ -23,6 +23,7 @@
   const CAM_PITCH_MIN = -1.1, CAM_PITCH_MAX = 0.8;   // full up/down look
   const CAM_SHOULDER = 0.55;      // right-shoulder offset while aiming
   const CAM_LOOK_UP = 1.1;        // aim above the pivot → hero sits low in frame
+  const PLAYER_RADIUS = 0.32;     // on-foot body radius used for wall / car collisions
 
   /* ---- Weapon table ----
      auto: hold LMB to keep firing (AK-47); piston fires once per click.
@@ -176,6 +177,7 @@
     empty() { this.tone(180, 0.05, 'square', 0.14, 120); this.noise(0.03, 0.1, 900); },
     reload() { this.tone(520, 0.06, 'square', 0.1, 700); setTimeout(() => this.tone(620, 0.05, 'square', 0.1, 900), 90); setTimeout(() => this.click(), 260); },
     thud() { this.noise(0.05, 0.16, 650); this.tone(130, 0.05, 'square', 0.12, 70); },
+    step() { this.noise(0.045, 0.07, 420); },
     warn() { this.tone(880, 0.12, 'square', 0.18); setTimeout(() => this.tone(660, 0.14, 'square', 0.18), 140); },
 
     /* ---- ambient city soundscape ---- */
@@ -2035,6 +2037,10 @@
       }
     }
 
+    // A stolen car the hero left behind stays parked where he left it
+    // (it still smoulders/burns above, but no AI driver reclaims it).
+    if (car.stolen) { car.curSpeed = 0; return; }
+
     // ---- police PURSUIT mode: WANTED-LEVEL ESCALATION ----
     // how many cruisers join the hunt depends on the star level:
     // 1 sao -> 1 xe, 2 -> 2, 3 -> 3, 4 -> 5, 5 -> TẤT CẢ
@@ -2186,14 +2192,44 @@
   }
 
   /* ---------------- Vehicle enter/exit (carjacking) ---------------- */
-  function nearestCar() {
+  function nearestCarInfo() {
     let best = null, bd = 3.4;
-    cars.forEach(c => {
-      if (c.dead) return;
+    for (let i = 0; i < cars.length; i++) {
+      const c = cars[i];
+      if (c.dead) continue;
       const d = c.group.position.distanceTo(player.pos);
       if (d < bd) { bd = d; best = c; }
-    });
-    return best;
+    }
+    // never "enter" a car through a wall
+    if (best && !hasLOS(player.pos, best.pos)) return null;
+    return best ? { car: best, dist: bd } : null;
+  }
+  function nearestCar() {
+    const info = nearestCarInfo();
+    return info ? info.car : null;
+  }
+
+  // Pick a safe spot beside the car to step out: driver door first, then the
+  // passenger door, then front/back — never inside a wall, water or traffic.
+  function findExitSpot(car) {
+    const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+    const rx = Math.cos(car.heading), rz = -Math.sin(car.heading);
+    const cands = [
+      [-rx * 1.75, -rz * 1.75],   // driver door (left side)
+      [rx * 1.75, rz * 1.75],     // passenger door
+      [-fx * 2.6, -fz * 2.6],     // behind the car
+      [fx * 2.6, fz * 2.6]        // in front of the car
+    ];
+    const L = CENTER + 4;
+    for (let i = 0; i < cands.length; i++) {
+      const x = car.pos.x + cands[i][0], z = car.pos.z + cands[i][1];
+      if (Math.abs(x) > L || Math.abs(z) > L) continue;
+      if (buildingBlocked(x, z, PLAYER_RADIUS)) continue;
+      if (isInsideWater(x, z) && groundY(x, z) < 0.5) continue;
+      if (carBlocked(x, z, PLAYER_RADIUS)) continue;
+      return new THREE.Vector3(x, 0, z);
+    }
+    return new THREE.Vector3(car.pos.x + 2, 0, car.pos.z + 2);
   }
 
   // kick the AI driver out of the car: he spawns beside the door and runs away
@@ -2225,12 +2261,20 @@
   }
 
   function enterCar() {
-    if (player.inCar) return;
+    if (!player || player.dead || player.inCar) return;
     const c = nearestCar();
     if (!c) { toast('Không có xe nào gần đây'); return; }
     player.inCar = c;
     c.driver = player;
+    player.vel.set(0, 0, 0);
+    player.isMoving = false;
+    player.stepT = 0;
+    player.group.rotation.x = 0;
     scene.remove(player.group);
+    // Point the chase-camera down the car so driving reads immediately.
+    camYaw = c.heading;
+    camPitch = -0.17;
+    freeLookT = 99;
     if (!c.stolen) {
       // TRỘM XE: this car still has its AI driver inside
       c.stolen = true;
@@ -2245,16 +2289,21 @@
     Sfx.car();
   }
   function exitCar() {
-    if (!player.inCar) return;
+    if (!player || !player.inCar) return;
     const c = player.inCar;
     c.driver = null;
-    const p = c.group.position.clone().add(new THREE.Vector3(2, 0, 2));
-    if (isInsideBuilding(p.x, p.z)) { p.set(c.group.position.x - 2, 0, c.group.position.z - 2); }
-    clampToWorld(p);
-    player.pos.copy(p);
-    player.group.position.copy(p);
+    c.curSpeed = 0;                    // the car stays parked where you leave it
+    const spot = findExitSpot(c);
+    player.pos.set(spot.x, 0, spot.z);
+    player.group.position.set(spot.x, groundY(spot.x, spot.z), spot.z);
+    player.vel.set(0, 0, 0);
+    player.isMoving = false;
+    player.stepT = 0;
+    camYaw = c.heading;
+    camPitch = -0.17;
+    freeLookT = 99;
     player.facing = camYaw;
-    player.group.rotation.y = camYaw;
+    player.group.rotation.set(0, camYaw, 0);
     scene.add(player.group);
     player.inCar = null;
     Sfx.click();
@@ -2458,16 +2507,41 @@
   }
 
   /* ---------------- Player update (camera-relative movement) ---------------- */
+  // AABB checks padded by the hero's body radius, so shoulders do not clip walls
+  function buildingBlocked(x, z, r) {
+    for (let i = 0; i < buildingBoxes.length; i++) {
+      const b = buildingBoxes[i];
+      if (x > b.minX - r && x < b.maxX + r && z > b.minZ - r && z < b.maxZ + r) return true;
+    }
+    return false;
+  }
+  // Parked / slow cars are solid (two overlapping circles along the body so
+  // the front/rear are covered too); fast traffic never traps the player.
+  function carBlocked(x, z, r) {
+    for (let i = 0; i < cars.length; i++) {
+      const c = cars[i];
+      if (c.dead || Math.abs(c.curSpeed) > 1.2) continue;
+      const fx = Math.sin(c.heading), fz = Math.cos(c.heading);
+      const rr = r + 0.95, rr2 = rr * rr;
+      for (let k = -1; k <= 1; k += 2) {
+        const dx = c.pos.x + fx * 0.85 * k - x;
+        const dz = c.pos.z + fz * 0.85 * k - z;
+        if (dx * dx + dz * dz < rr2) return true;
+      }
+    }
+    return false;
+  }
   function moveWithCollision(pos, dx, dz) {
+    const r = PLAYER_RADIUS;
     if (dx !== 0) {
-      const ox = pos.x;
-      pos.x += dx;
-      if (isInsideBuilding(pos.x, pos.z)) pos.x = ox;   // slide along walls
+      const nx = pos.x + dx;
+      if (!buildingBlocked(nx, pos.z, r) && !carBlocked(nx, pos.z, r)) pos.x = nx;
+      else player.vel.x = 0;                       // slide along the wall
     }
     if (dz !== 0) {
-      const oz = pos.z;
-      pos.z += dz;
-      if (isInsideBuilding(pos.x, pos.z)) pos.z = oz;
+      const nz = pos.z + dz;
+      if (!buildingBlocked(pos.x, nz, r) && !carBlocked(pos.x, nz, r)) pos.z = nz;
+      else player.vel.z = 0;
     }
   }
 
@@ -2519,34 +2593,63 @@
     const wz = -sy * ix + cy * iz;
 
     const sprinting = mi.sprint && moving;
-    const spd = player.speed * (sprinting ? player.sprint : 1) * (aimHeld ? 0.65 : 1);
-    player.isMoving = moving;
-    if (moving) {
-      moveWithCollision(player.pos, wx * spd * dt, wz * spd * dt);
+    const maxSpd = player.speed * (sprinting ? player.sprint : 1) * (aimHeld ? 0.65 : 1);
+    // Weighty locomotion: ease toward the target velocity and brake smoothly
+    // instead of snapping to full speed the instant a key goes down.
+    const tvx = moving ? wx * maxSpd : 0;
+    const tvz = moving ? wz * maxSpd : 0;
+    const vel = player.vel;
+    const accel = moving ? (sprinting ? 26 : 40) : 46;
+    const dvx = tvx - vel.x, dvz = tvz - vel.z;
+    const dv = Math.hypot(dvx, dvz);
+    const maxDv = accel * dt;
+    if (dv > maxDv && dv > 1e-6) {
+      vel.x += (dvx / dv) * maxDv;
+      vel.z += (dvz / dv) * maxDv;
+    } else {
+      vel.x = tvx; vel.z = tvz;
+    }
+    const speed = Math.hypot(vel.x, vel.z);
+    player.isMoving = moving || speed > 0.25;
+    if (speed > 0.001) {
+      moveWithCollision(player.pos, vel.x * dt, vel.z * dt);
       clampToWorld(player.pos);
     }
-    player.group.position.set(player.pos.x, groundY(player.pos.x, player.pos.z), player.pos.z);
 
-    // facing: aim/straft toward the crosshair, otherwise run toward movement
+    // stride-synced body bob (a few cm, only while really moving)
+    const bob = speed > 0.6 ? Math.abs(Math.sin(player.anim || 0)) * 0.03 : 0;
+    player.group.position.set(player.pos.x, groundY(player.pos.x, player.pos.z) + bob, player.pos.z);
+
+    // facing: run toward the actual velocity, otherwise face the crosshair
     const aimFacing = Math.atan2(aim.dir.x, aim.dir.z);
+    const aimingNow = aimHeld || (mouse.down && player.weapon !== 0);
     let targetFacing = aimFacing;
-    if (moving && !aimHeld && !(mouse.down && player.weapon !== 0)) {
-      targetFacing = Math.atan2(wx, wz);
-    }
+    if (!aimingNow && speed > 0.4) targetFacing = Math.atan2(vel.x, vel.z);
     player.facing = angLerp(player.facing, targetFacing, Math.min(1, dt * 14));
     player.group.rotation.y = player.facing;
 
-    // walk / run animation
-    const movingNow = moving && spd > 0.1;
-    player.anim = (player.anim || 0) + dt * (movingNow ? spd * 1.55 : 0);
-    const swing = Math.sin(player.anim) * (movingNow ? 0.62 : 0);
+    // lean slightly into a sprint
+    player.group.rotation.x = sprinting && speed > 2 ? 0.07 : 0;
+
+    // walk / run animation driven by real ground speed (walk → sprint)
+    const movingNow = speed > 0.15;
+    player.anim = (player.anim || 0) + dt * (movingNow ? speed * 1.55 : 0);
+    const swingAmt = movingNow ? 0.28 + Math.min(1, speed / 6.4) * 0.42 : 0;
+    const swing = Math.sin(player.anim) * swingAmt;
     player.group.userData.legL.rotation.x = movingNow ? swing : 0;
     player.group.userData.legR.rotation.x = movingNow ? -swing : 0;
+
+    // soft footstep taps in time with the stride
+    player.stepT = (player.stepT || 0) + (movingNow ? dt * speed : 0);
+    if (player.stepT > 2.2) {
+      player.stepT = 0;
+      if (speed > 1.6) Sfx.step();
+    }
 
     // held weapon ready pose (gun up), natural arm swing when unarmed.
     // The gun dips while drawing / reloading and kicks back when firing.
     const hasWeapon = player.weapon !== 0;
-    const armSwing = movingNow ? Math.sin(player.anim + Math.PI) * 0.45 : 0;
+    const armSwing = movingNow ? Math.sin(player.anim + Math.PI) * (0.35 + Math.min(1, speed / 6.4) * 0.2) : 0;
     const kick = player.recoil * 0.35;
     let pose = 0;
     if (player.switchT > 0) pose += (player.switchT / SWITCH_TIME) * 0.4;
@@ -2823,6 +2926,7 @@
   const speedBox = document.getElementById('speedBox');
   const speedN = document.getElementById('speedN');
   const reloadN = document.getElementById('reloadN');
+  const carPrompt = document.getElementById('carPrompt');
   let msgTimer = null, flashT = 0;
 
   function buildStars() {
@@ -2896,6 +3000,23 @@
     speedBox.classList.remove('hidden');
     if (speedN) speedN.textContent = Math.round(Math.abs(player.inCar.curSpeed) * 7.5);
   }
+  // "Press E" interaction prompt when standing next to a car
+  let _carPromptTxt = '';
+  function updateCarPrompt() {
+    if (!carPrompt) return;
+    let txt = '';
+    if (player && !player.dead && !player.inCar) {
+      const info = nearestCarInfo();
+      if (info) {
+        const c = info.car;
+        if (c.isPolice) txt = 'E — TRỘM XE CẢNH SÁT';
+        else if (c.stolen || !c.driverMesh) txt = 'E — LÊN XE';
+        else txt = 'E — TRỘM XE';
+      }
+    }
+    if (txt !== _carPromptTxt) { _carPromptTxt = txt; carPrompt.textContent = txt; }
+    carPrompt.classList.toggle('hidden', !txt);
+  }
   let _reloadTxt = '';
   function updateReloadHUD() {
     if (!reloadN) return;
@@ -2917,6 +3038,9 @@
     player.hp = player.maxHp; player.dead = false; player.wanted = 0; player.crimeTimer = 0;
     if (player.inCar) { player.inCar.driver = null; player.inCar = null; }
     player.pos.copy(SPAWN); player.group.position.copy(player.pos);
+    player.vel.set(0, 0, 0);
+    player.isMoving = false;
+    player.stepT = 0;
     player.facing = 0; player.group.rotation.set(0, 0, 0);
     player.switchT = 0; player.reloadT = 0; player.bloom = 0; player.recoil = 0;
     player.targetSeen = false;
@@ -3043,6 +3167,7 @@
     updateCamera(dt);
     updateVehicleHUD();
     updateReloadHUD();
+    updateCarPrompt();
 
     if (flashT > 0) { flashT -= dt; flashEl.style.opacity = Math.max(0, flashT * 2); }
     updateOcclusion(dt);

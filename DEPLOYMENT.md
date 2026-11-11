@@ -113,7 +113,7 @@ cd game_test_gta
 node tests/smoke.test.cjs
 ```
 
-All 123 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
+All 132 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
 
 ### Mobile/iPad
 - Works with touch controls

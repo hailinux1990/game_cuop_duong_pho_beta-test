@@ -56,6 +56,7 @@
              animation:floatUp .7s ease-out forwards; }
   @keyframes floatUp { from { opacity:1; } to { opacity:0; margin-top:-30px; } }
   #msg { bottom:118px; left:50%; transform:translateX(-50%); text-align:center; font-size:13px; letter-spacing:1px; color:#ffe06a; opacity:0; transition:opacity .3s; white-space:nowrap; }
+  #carPrompt { bottom:152px; left:50%; transform:translateX(-50%); padding:6px 16px; border:2px solid #000; background:rgba(18,8,26,.72); box-shadow:0 0 0 2px rgba(255,111,181,.55); color:var(--cyan); font-size:13px; letter-spacing:2px; white-space:nowrap; }
   #hint { top:196px; right:14px; text-align:right; font-size:11px; line-height:1.7; color:#eee; }
   #hint b { color:var(--cyan); }
   /* ---- Centre crosshair (third-person aim) ---- */
@@ -123,6 +124,8 @@
   </div>
 
   <div id="msg" class="hud"></div>
+
+  <div id="carPrompt" class="hud hidden"></div>
 
   <div id="hint" class="hud">
     <b>WASD</b> di chuyển (hướng camera) &nbsp; <b>SHIFT</b> chạy<br>
