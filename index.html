@@ -83,6 +83,12 @@
   .overlay .controls b { color:var(--cyan); }
   .btn { pointer-events:auto; cursor:pointer; margin-top:22px; padding:12px 30px; font-family:inherit; font-size:16px; letter-spacing:3px; color:#12040f; background:var(--ui); border:3px solid #000; box-shadow:0 0 0 3px #fff, 0 0 26px rgba(255,79,154,.7); text-transform:uppercase; }
   .btn:hover { background:#ffd0e8; }
+  /* ---- Live clock (GMT+7) + weather status ---- */
+  #clockBox { top:14px; left:50%; transform:translateX(-50%); text-align:center; padding:6px 16px; border:2px solid #000; background:rgba(18,8,26,.62); box-shadow:0 0 0 2px rgba(79,240,232,.45); }
+  #clockTime { font-size:20px; letter-spacing:3px; color:var(--cyan); text-shadow:2px 2px 0 #000; }
+  #clockSub { font-size:10px; letter-spacing:2px; color:#ffb8dd; margin-top:2px; }
+  #clockSub #weatherLabel { color:#ffd25e; }
+  #lightning { position:fixed; inset:0; z-index:7; pointer-events:none; background:#fff; opacity:0; }
   #wasted { background:rgba(60,0,20,.85); }
   #wasted h1 { color:#f33; text-shadow:3px 3px 0 #000, 0 0 24px rgba(255,40,40,.6); }
   #flash { position:fixed; inset:0; z-index:8; pointer-events:none; background:#f00; opacity:0; }
@@ -94,6 +100,12 @@
   <div id="flash"></div>
 
   <div id="crosshair"><div class="dot"></div></div>
+  <div id="lightning"></div>
+
+  <div id="clockBox" class="hud">
+    <div id="clockTime">--:--:--</div>
+    <div id="clockSub"><span id="clockZone">GMT+7</span> · <span id="weatherLabel">☀ NẮNG</span></div>
+  </div>
 
   <!-- HUD -->
   <div id="healthBox" class="hud">
@@ -132,7 +144,7 @@
     <b>CHUỘT</b> xoay camera trái·phải·lên·xuống (click để khoá chuột)<br>
     <b>CLICK TRÁI</b> bắn/đánh &nbsp; <b>CLICK PHẢI (giữ)</b> ngắm &nbsp; <b>LĂN CHUỘT</b> zoom<br>
     <b>E</b> lên xe / TRỘM XE &nbsp; <b>C</b> chỉnh camera sau lưng &nbsp; <b>1·2·3·4</b> đổi vũ khí &nbsp; <b>R</b> nạp đạn<br>
-    <b>[ ]</b> độ nhạy chuột &nbsp; <b>Y</b> đảo trục dọc
+    <b>[ ]</b> độ nhạy chuột &nbsp; <b>Y</b> đảo trục dọc &nbsp; <b>T</b> đổi thời tiết
   </div>
 
   <div id="minimapBox" class="hud">
@@ -149,9 +161,10 @@
       <b>Chuột</b> — xoay camera trái/phải/lên/xuống (click để khoá chuột · ESC mở khoá · kéo chuột phải để xoay khi chưa khoá) &nbsp;&nbsp; <b>Lăn chuột</b> — zoom<br>
       <b>Click trái</b> — đánh / bắn &nbsp;&nbsp; <b>Giữ chuột phải</b> — ngắm cận vai (tản đạn thấp hơn)<br>
       <b>1 / 2 / 3 / 4</b> — tay · dao · súng lục (bắn từng phát) · <b>AK-47 (giữ chuột để bắn liên thanh)</b> &nbsp;&nbsp; <b>R</b> — nạp đạn (có thời gian nạp)<br>
-      <b>C</b> — chỉnh camera về sau lưng &nbsp;&nbsp; <b>[ / ]</b> — độ nhạy chuột &nbsp;&nbsp; <b>Y</b> — đảo trục dọc<br>
+      <b>C</b> — chỉnh camera về sau lưng &nbsp;&nbsp; <b>[ / ]</b> — độ nhạy chuột &nbsp;&nbsp; <b>Y</b> — đảo trục dọc &nbsp;&nbsp; <b>T</b> — đổi thời tiết<br>
       <b>E</b> — lên xe / <b>TRỘM XE</b> đang có người lái<br><br>
       🌴 Thành phố HOÀNG HÔN 11×11 block — 4 khu neon pastel, bãi biển, cầu vượt sông!<br>
+      🌦️ Thời tiết ngẫu nhiên NẮNG / MÂY ĐEN / MƯA / GIÔNG — đồng hồ GMT+7 chạy thật ở giữa trên màn hình!<br>
       🚨 Có <b>SAO TRUY NÃ</b> → đội xe cảnh sát rượt khắp map, còi hú inh ỏi; xe áp sát DỪNG LẠI rồi <b>cảnh sát nhảy xuống bắn</b> bạn!<br>
       💥 Bắn xe cộ vài phát để <b>NỔ TUNG</b> — xe nổ lan theo dây chuyền, xác cháy đen ở lại!<br>
       Xe thường không thể cán chết bạn — chúng sẽ phanh và DỪNG khi bạn đứng trước!<br>

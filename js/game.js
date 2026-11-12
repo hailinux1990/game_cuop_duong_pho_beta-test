@@ -178,6 +178,29 @@
     reload() { this.tone(520, 0.06, 'square', 0.1, 700); setTimeout(() => this.tone(620, 0.05, 'square', 0.1, 900), 90); setTimeout(() => this.click(), 260); },
     thud() { this.noise(0.05, 0.16, 650); this.tone(130, 0.05, 'square', 0.12, 70); },
     step() { this.noise(0.045, 0.07, 420); },
+    thunder() { this.noise(1.2, 0.5, 380, true); this.tone(46, 1.4, 'sawtooth', 0.16, 18); this.tone(92, 0.5, 'sine', 0.08, 28); },
+    rainNode: null, _rainLevel: 0,
+    setRain(level) {
+      if (!this.ctx) return;
+      const lv = Math.max(0, Math.min(1, level || 0));
+      if (!this.rainNode) {
+        if (lv < 0.02) return;
+        const ctx = this.ctx;
+        const len = Math.floor(ctx.sampleRate * 2);
+        const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * 0.5;
+        const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500;
+        const g = ctx.createGain(); g.gain.value = 0;
+        src.connect(lp); lp.connect(g); g.connect(this.master);
+        src.start();
+        this.rainNode = g;
+      }
+      if (Math.abs(lv - this._rainLevel) < 0.02) return;
+      this._rainLevel = lv;
+      this.rainNode.gain.setTargetAtTime(lv * 0.12, this.ctx.currentTime, 0.5);
+    },
     warn() { this.tone(880, 0.12, 'square', 0.18); setTimeout(() => this.tone(660, 0.14, 'square', 0.18), 140); },
 
     /* ---- ambient city soundscape ---- */
@@ -276,6 +299,10 @@
   const canvas = document.getElementById('game');
   let renderer, scene, camera;
   let W = window.innerWidth, H = window.innerHeight;
+  let skyMesh = null, sunSprite = null;
+  let ambientLight = null, hemiLight = null, keyLight = null, rimLight = null;
+  let cloudGroup = null, cloudMat = null;
+  let rainLines = null;
 
   const _c = (hex) => new THREE.Color(hex);
 
@@ -345,24 +372,237 @@
     );
     sky.renderOrder = -1000;
     scene.add(sky);
+    skyMesh = sky;
     const sun = new THREE.Sprite(new THREE.SpriteMaterial({
       map: makeSunTexture(), transparent: true, depthWrite: false, fog: false, blending: THREE.AdditiveBlending
     }));
     sun.scale.set(240, 240, 1);
     sun.position.set(180, 52, 760);
     scene.add(sun);
+    sunSprite = sun;
 
     /* warm sunset key light, violet sky bounce, cool rim */
-    scene.add(new THREE.AmbientLight(0xffd0c8, 0.4));
-    const hemi = new THREE.HemisphereLight(0x9a7cff, 0x5a3a2a, 0.45);
-    scene.add(hemi);
-    const key = new THREE.DirectionalLight(0xffb070, 0.85);
-    key.position.set(120, 130, 260);
-    scene.add(key);
-    const rim = new THREE.DirectionalLight(0x4a3a8a, 0.3);
-    rim.position.set(-160, 60, -220);
-    scene.add(rim);
+    ambientLight = new THREE.AmbientLight(0xffd0c8, 0.4);
+    scene.add(ambientLight);
+    hemiLight = new THREE.HemisphereLight(0x9a7cff, 0x5a3a2a, 0.45);
+    scene.add(hemiLight);
+    keyLight = new THREE.DirectionalLight(0xffb070, 0.85);
+    keyLight.position.set(120, 130, 260);
+    scene.add(keyLight);
+    rimLight = new THREE.DirectionalLight(0x4a3a8a, 0.3);
+    rimLight.position.set(-160, 60, -220);
+    scene.add(rimLight);
+
+    buildClouds();
+    buildRain();
   }
+
+  /* ================================================================
+     WEATHER — sunny sunset, drifting clouds and random rain storms.
+     The HUD also shows the live clock in the GMT+7 timezone.
+     ================================================================ */
+  function buildClouds() {
+    const puffGeo = new THREE.SphereGeometry(1, 7, 5);
+    cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false });
+    cloudGroup = new THREE.Group();
+    for (let i = 0; i < 34; i++) {
+      const puff = new THREE.Mesh(puffGeo, cloudMat);
+      const r = Math.random();
+      puff.scale.set(8 + r * 14, 3 + Math.random() * 4, 8 + Math.random() * 10);
+      puff.position.set((Math.random() - 0.5) * 900, 62 + Math.random() * 55, (Math.random() - 0.5) * 900);
+      cloudGroup.add(puff);
+    }
+    scene.add(cloudGroup);
+  }
+
+  const RAIN_N = 950;
+  let rainPositions = null, rainX = null, rainY = null, rainZ = null, rainLen = null;
+  function buildRain() {
+    rainX = new Float32Array(RAIN_N);
+    rainY = new Float32Array(RAIN_N);
+    rainZ = new Float32Array(RAIN_N);
+    rainLen = new Float32Array(RAIN_N);
+    rainPositions = new Float32Array(RAIN_N * 6);
+    for (let i = 0; i < RAIN_N; i++) {
+      rainX[i] = (Math.random() * 2 - 1) * 24;
+      rainZ[i] = (Math.random() * 2 - 1) * 24;
+      rainY[i] = Math.random() * 26;
+      rainLen[i] = 0.5 + Math.random() * 0.6;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
+    rainLines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+      color: 0xbfd8e8, transparent: true, opacity: 0.45, depthWrite: false
+    }));
+    rainLines.frustumCulled = false;
+    rainLines.visible = false;
+    scene.add(rainLines);
+  }
+
+  const WEATHER_STATES = {
+    clear:  { rain: 0,    dark: 0,    hold: [45, 90], label: '☀ NẮNG' },
+    cloudy: { rain: 0.04, dark: 0.55, hold: [18, 35], label: '☁ MÂY KÉO VỀ' },
+    rain:   { rain: 0.8,  dark: 0.8,  hold: [25, 50], label: '🌧 MƯA RƠI' },
+    storm:  { rain: 1,    dark: 1,    hold: [12, 25], label: '⛈ GIÔNG BÃO' }
+  };
+  const WEATHER_TRANS = {
+    clear:  [['clear', 0.15], ['cloudy', 0.55], ['rain', 0.30]],
+    cloudy: [['clear', 0.30], ['cloudy', 0.15], ['rain', 0.55]],
+    rain:   [['cloudy', 0.45], ['rain', 0.30], ['storm', 0.25]],
+    storm:  [['rain', 0.60], ['cloudy', 0.40]]
+  };
+  let weatherState = 'clear';
+  let weatherRain = 0, weatherDark = 0;
+  let weatherTimer = 25 + Math.random() * 30;
+  let lightningTimer = 9, lightningFlash = 0, _lastFlashOp = -1;
+
+  function setWeatherState(next, silent) {
+    const st = WEATHER_STATES[next];
+    if (!st) return;
+    weatherState = next;
+    weatherTimer = st.hold[0] + Math.random() * (st.hold[1] - st.hold[0]);
+    if (!silent) {
+      toast(next === 'clear' ? 'TRỜI NẮNG LÊN ☀'
+        : next === 'cloudy' ? 'MÂY ĐEN KÉO VỀ ☁'
+        : next === 'rain' ? 'MƯA BẮT ĐẦU RƠI 🌧'
+        : 'GIÔNG BÃO ẬP TỚI ⛈');
+    }
+  }
+  function rollWeather() {
+    const opts = WEATHER_TRANS[weatherState] || WEATHER_TRANS.clear;
+    const r = Math.random();
+    let acc = 0, next = 'clear';
+    for (let i = 0; i < opts.length; i++) {
+      acc += opts[i][1];
+      if (r <= acc) { next = opts[i][0]; break; }
+    }
+    setWeatherState(next);
+  }
+
+  const _wFogClear = new THREE.Color(0xff9a80);
+  const _wFogRain = new THREE.Color(0x55616e);
+  const _wTmp = new THREE.Color();
+  function applyWeather() {
+    if (!scene || !scene.fog) return;
+    const t = Math.max(weatherDark, weatherRain * 0.6);
+    _wTmp.copy(_wFogClear).lerp(_wFogRain, t);
+    scene.fog.color.copy(_wTmp);
+    if (scene.background && scene.background.isColor) scene.background.copy(_wTmp);
+    scene.fog.near = 80 - 46 * t;
+    scene.fog.far = 620 - 330 * t;
+    if (ambientLight) ambientLight.intensity = 0.42 + 0.05 * t;
+    if (hemiLight) hemiLight.intensity = 0.45 - 0.14 * t;
+    if (keyLight) keyLight.intensity = 0.85 - 0.62 * t + lightningFlash * 1.1;
+    if (rimLight) rimLight.intensity = 0.3 - 0.24 * t;
+    if (skyMesh) skyMesh.material.color.setRGB(1 - 0.45 * t, 1 - 0.38 * t, 1 - 0.26 * t);
+    if (sunSprite) {
+      const so = Math.max(0, 1 - t * 1.55);
+      sunSprite.material.opacity = so;
+      sunSprite.visible = so > 0.02;
+    }
+    if (cloudMat) {
+      const c = 1 - 0.55 * t;
+      cloudMat.color.setRGB(c, c, c * 1.02);
+      cloudMat.opacity = 0.22 + 0.66 * t;
+    }
+  }
+
+  function updateClouds(dt) {
+    if (!cloudGroup) return;
+    const wind = (0.8 + weatherRain * 1.6) * dt;
+    for (let i = 0; i < cloudGroup.children.length; i++) {
+      const p = cloudGroup.children[i];
+      p.position.x += wind;
+      p.position.z += wind * 0.12;
+      if (p.position.x > 540) p.position.x = -540;
+      if (p.position.z > 540) p.position.z = -540;
+    }
+  }
+
+  function updateRain(dt) {
+    if (!rainLines) return;
+    const rain = weatherRain;
+    if (rain < 0.02) {
+      if (rainLines.visible) rainLines.visible = false;
+      return;
+    }
+    rainLines.visible = true;
+    rainLines.material.opacity = 0.16 + 0.4 * rain;
+    const count = Math.max(2, Math.floor(RAIN_N * Math.min(1, rain * 1.25)));
+    const px = player ? player.pos.x : 0;
+    const pz = player ? player.pos.z : 0;
+    const fall = (weatherRain > 0.6 ? 34 : 28) * dt;
+    for (let i = 0; i < count; i++) {
+      rainY[i] -= fall;
+      let x = rainX[i], z = rainZ[i];
+      if (Math.abs(x - px) > 24 || Math.abs(z - pz) > 24 || rainY[i] < 0.15) {
+        x = px + (Math.random() * 2 - 1) * 24;
+        z = pz + (Math.random() * 2 - 1) * 24;
+        rainY[i] = 19 + Math.random() * 8;
+      }
+      rainX[i] = x; rainZ[i] = z;
+      const j = i * 6;
+      rainPositions[j] = x;
+      rainPositions[j + 1] = rainY[i];
+      rainPositions[j + 2] = z;
+      rainPositions[j + 3] = x - 0.24;
+      rainPositions[j + 4] = rainY[i] - rainLen[i];
+      rainPositions[j + 5] = z - 0.1;
+    }
+    rainLines.geometry.setDrawRange(0, count * 2);
+    rainLines.geometry.attributes.position.needsUpdate = true;
+  }
+
+  function triggerLightning() {
+    lightningFlash = 1;
+    Sfx.thunder();
+  }
+
+  function updateWeather(dt) {
+    if (!scene) return;
+    weatherTimer -= dt;
+    if (weatherTimer <= 0) rollWeather();
+    const target = WEATHER_STATES[weatherState] || WEATHER_STATES.clear;
+    const k = 1 - Math.exp(-dt * 0.55);       // clouds gather / clear over a few seconds
+    weatherRain += (target.rain - weatherRain) * k;
+    weatherDark += (target.dark - weatherDark) * k;
+    if (Math.abs(target.rain - weatherRain) < 0.004) weatherRain = target.rain;
+    if (Math.abs(target.dark - weatherDark) < 0.004) weatherDark = target.dark;
+    if (weatherRain > 0.6) {
+      lightningTimer -= dt;
+      if (lightningTimer <= 0) {
+        lightningTimer = 6 + Math.random() * 11;
+        triggerLightning();
+      }
+    } else {
+      lightningTimer = Math.max(lightningTimer, 4);
+    }
+    if (lightningFlash > 0) lightningFlash = Math.max(0, lightningFlash - dt * 4.5);
+    applyWeather();
+    updateClouds(dt);
+    updateRain(dt);
+    Sfx.setRain(weatherRain);
+    updateWeatherHUD();
+    // lightning white-out overlay
+    if (lightningEl) {
+      const op = Math.round(lightningFlash * 0.85 * 100) / 100;
+      if (op !== _lastFlashOp) { _lastFlashOp = op; lightningEl.style.opacity = op; }
+    }
+  }
+
+  // test / debug hook: force a weather state immediately
+  function setWeather(name) {
+    if (!WEATHER_STATES[name]) return;
+    setWeatherState(name, true);
+    const st = WEATHER_STATES[name];
+    weatherRain = st.rain;
+    weatherDark = st.dark;
+    applyWeather();
+    updateClouds(0);
+    updateRain(0);
+    updateWeatherHUD();
+  }
+
 
   /* ---------------- World ---------------- */
   let built = false, spawned = false;
@@ -2336,6 +2576,13 @@
     else if (code === 'BracketRight') { sensScale = Math.min(3, sensScale * 1.15); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
     else if (code === 'BracketLeft') { sensScale = Math.max(0.4, sensScale / 1.15); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
     else if (code === 'KeyY') { invertY = !invertY; toast(invertY ? 'Đảo trục dọc: BẬT' : 'Đảo trục dọc: TẮT'); Sfx.click(); }
+    else if (code === 'KeyT') {
+      const order = ['clear', 'cloudy', 'rain', 'storm'];
+      const next = order[(order.indexOf(weatherState) + 1) % order.length];
+      setWeather(next);
+      toast('Thời tiết: ' + WEATHER_STATES[next].label);
+      Sfx.click();
+    }
     else if (code === 'KeyE') { if (player.inCar) exitCar(); else enterCar(); }
   }
 
@@ -2927,6 +3174,10 @@
   const speedN = document.getElementById('speedN');
   const reloadN = document.getElementById('reloadN');
   const carPrompt = document.getElementById('carPrompt');
+  const clockTime = document.getElementById('clockTime');
+  const clockZone = document.getElementById('clockZone');
+  const weatherLabel = document.getElementById('weatherLabel');
+  const lightningEl = document.getElementById('lightning');
   let msgTimer = null, flashT = 0;
 
   function buildStars() {
@@ -3000,6 +3251,26 @@
     speedBox.classList.remove('hidden');
     if (speedN) speedN.textContent = Math.round(Math.abs(player.inCar.curSpeed) * 7.5);
   }
+  // Live clock in the GMT+7 timezone (Vietnam) — independent of the PC clock zone
+  let _lastClockTxt = '';
+  function updateClock() {
+    if (clockZone && clockZone.textContent !== 'GMT+7') clockZone.textContent = 'GMT+7';
+    if (!clockTime) return;
+    const d = new Date(Date.now() + 7 * 3600 * 1000);
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const mm = String(d.getUTCMinutes()).padStart(2, '0');
+    const ss = String(d.getUTCSeconds()).padStart(2, '0');
+    const txt = hh + ':' + mm + ':' + ss;
+    if (txt !== _lastClockTxt) { _lastClockTxt = txt; clockTime.textContent = txt; }
+  }
+  let _lastWeatherLabel = '';
+  function updateWeatherHUD() {
+    if (!weatherLabel) return;
+    const st = WEATHER_STATES[weatherState];
+    const txt = st ? st.label : '';
+    if (txt !== _lastWeatherLabel) { _lastWeatherLabel = txt; weatherLabel.textContent = txt; }
+  }
+
   // "Press E" interaction prompt when standing next to a car
   let _carPromptTxt = '';
   function updateCarPrompt() {
@@ -3168,6 +3439,8 @@
     updateVehicleHUD();
     updateReloadHUD();
     updateCarPrompt();
+    updateWeather(dt);
+    updateClock();
 
     if (flashT > 0) { flashT -= dt; flashEl.style.opacity = Math.max(0, flashT * 2); }
     updateOcclusion(dt);
@@ -3239,6 +3512,26 @@
       camYaw = yaw;
       if (pitch !== undefined) camPitch = Math.max(CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, pitch));
       freeLookT = 0;
+    },
+    setWeather,
+    strikeLightning: triggerLightning,
+    get weather() {
+      return {
+        state: weatherState,
+        rain: weatherRain,
+        dark: weatherDark,
+        timer: weatherTimer,
+        fogFar: scene && scene.fog ? scene.fog.far : 0,
+        fogNear: scene && scene.fog ? scene.fog.near : 0,
+        fogColor: scene && scene.fog ? scene.fog.color.getHex() : 0,
+        sunVisible: !!(sunSprite && sunSprite.visible && sunSprite.material.opacity > 0.05),
+        sunOpacity: sunSprite ? sunSprite.material.opacity : 0,
+        rainVisible: !!(rainLines && rainLines.visible),
+        rainOpacity: rainLines ? rainLines.material.opacity : 0,
+        cloudShade: cloudMat ? cloudMat.color.r : 1,
+        cloudOpacity: cloudMat ? cloudMat.opacity : 0,
+        lightning: lightningFlash
+      };
     },
     get cameraState() { return { yaw: camYaw, pitch: camPitch, dist: camDist, aimHeld, sens: sensScale, invertY }; },
     snapCamera,

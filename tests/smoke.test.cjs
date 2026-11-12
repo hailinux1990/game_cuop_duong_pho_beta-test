@@ -611,6 +611,8 @@ handlers.mouseup({ button: 0 });
 check('bullets are blocked by the tower (car behind it untouched)', (wallCar.shot || 0) === wallShotsBefore);
 
 /* ================= TEST 19: Vice City sunset art direction ===================== */
+G.setWeather('clear');       // art-direction checks assume the sunset baseline
+step(2);
 let skyDomes = 0, sunSprites = 0, oceanPlane = null, palmTrunks = 0, neonMeshes = 0, opaqueFaded = 0;
 const NEON_HEX = [0xff3fa4, 0x3fe0ff, 0xb45cff, 0xffd23f, 0xff6a3f, 0x64ff9a];
 G.scene.traverse(o => {
@@ -734,6 +736,52 @@ check('E exits beside a safe door',
 const parked = entryCar.pos.clone();
 step(60);
 check('stolen car stays parked where the hero left it', entryCar.pos.distanceTo(parked) < 0.5);
+
+
+/* ================= TEST 25: weather + GMT+7 running clock ====================== */
+G.setWeather('clear');
+step(2);
+let wx = G.weather;
+check('sunny weather keeps the warm sunset fog', wx.fogColor === 0xff9a80);
+check('sun is visible in sunny weather', wx.sunVisible === true);
+check('clear weather restores visibility (fog far ' + Math.round(wx.fogFar) + ' m)', wx.fogFar > 550);
+check('weather HUD label shows sunny', els.weatherLabel.textContent.indexOf('NẮNG') >= 0);
+
+G.setWeather('rain');
+step(2);
+wx = G.weather;
+check('rain weather forces dark clouds (shade ' + wx.cloudShade.toFixed(2) + ')', wx.rain > 0.7 && wx.dark > 0.7 && wx.cloudShade < 0.6);
+check('rain fog closes in (' + Math.round(wx.fogFar) + ' m)', wx.fogFar < 400);
+check('the sun disappears behind the clouds', wx.sunVisible === false);
+check('rain streaks are rendered', wx.rainVisible === true && wx.rainOpacity > 0.2);
+check('weather HUD label shows rain', els.weatherLabel.textContent.indexOf('MƯA') >= 0);
+step(120);                         // keep raining for ~2 s
+check('rain keeps falling over time', G.weather.rainVisible === true && G.weather.rain > 0.7);
+G.strikeLightning();
+step(1);
+check('lightning flash fires', G.weather.lightning > 0 && Number(els.lightning.style.opacity) > 0);
+step(40);
+check('lightning flash fades out', G.weather.lightning === 0);
+
+G.setWeather('clear');
+step(2);
+wx = G.weather;
+check('clearing weather brings the sunset back', wx.rain < 0.05 && wx.fogColor === 0xff9a80 && wx.sunVisible === true);
+
+const cm = /^(\d{2}):(\d{2}):(\d{2})$/.exec(els.clockTime.textContent);
+check('clock displays HH:MM:SS ("' + els.clockTime.textContent + '")', !!cm);
+if (cm) {
+  const d = new Date(Date.now() + 7 * 3600 * 1000);
+  const expected = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+  const shown = (+cm[1]) * 3600 + (+cm[2]) * 60 + (+cm[3]);
+  check('clock runs on Vietnam GMT+7 time', Math.abs(shown - expected) <= 3);
+}
+check('clock labels the GMT+7 zone', els.clockZone.textContent === 'GMT+7');
+
+key('KeyT'); step(1);
+check('T hotkey cycles the weather (now ' + G.weather.state + ')', G.weather.state === 'cloudy');
+G.setWeather('clear');
+step(2);
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);
