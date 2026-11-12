@@ -83,6 +83,33 @@
     { x: 112, z: 112, r: 60 }      // thành phố phía nam sông
   ];
 
+  /* ---- persistent game settings (menu) ---- */
+  const SETTINGS_KEY = 'pixel-vice-city-settings-v1';
+  const settings = {
+    quality: 'medium', fov: 62, fxWeather: true, showFps: false,
+    sens: 1, invertY: false, volume: 60, muted: false
+  };
+  function loadSettings() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(SETTINGS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || typeof s !== 'object') return;
+      if (s.quality === 'low' || s.quality === 'medium' || s.quality === 'high') settings.quality = s.quality;
+      if (typeof s.fov === 'number') settings.fov = Math.max(50, Math.min(80, s.fov));
+      if (typeof s.fxWeather === 'boolean') settings.fxWeather = s.fxWeather;
+      if (typeof s.showFps === 'boolean') settings.showFps = s.showFps;
+      if (typeof s.sens === 'number') settings.sens = Math.max(0.4, Math.min(3, s.sens));
+      if (typeof s.invertY === 'boolean') settings.invertY = s.invertY;
+      if (typeof s.volume === 'number') settings.volume = Math.max(0, Math.min(100, s.volume));
+      if (typeof s.muted === 'boolean') settings.muted = s.muted;
+    } catch (e) { /* private mode / tests */ }
+  }
+  function saveSettings() {
+    try { if (window.localStorage) window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) {}
+  }
+  loadSettings();
+
   /* ---------------- Seeded RNG ---------------- */
   function mulberry32(seed) {
     let a = seed >>> 0;
@@ -381,7 +408,9 @@
       fatalWebGL();
       throw e;
     }
-    renderer.setPixelRatio(PIXEL_SCALE > 1 ? 1 / PIXEL_SCALE : Math.min(window.devicePixelRatio || 1, 1.5));
+    const qScale = settings.quality === 'low' ? 0.75 : settings.quality === 'high'
+      ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+    renderer.setPixelRatio(qScale);
     renderer.setSize(W, H, false);
     canvas.style.width = W + 'px';
     canvas.style.height = H + 'px';
@@ -390,7 +419,7 @@
     scene.background = _c(0xff9a80);
     scene.fog = new THREE.Fog(0xff9a80, 80, 620);
 
-    camera = new THREE.PerspectiveCamera(62, W / H, 0.1, 3000);
+    camera = new THREE.PerspectiveCamera(settings.fov || 62, W / H, 0.1, 3000);
 
     /* sunset sky dome + glowing sun on the horizon */
     const sky = new THREE.Mesh(
@@ -751,6 +780,10 @@
 
   function updateRain(dt) {
     if (!rainLines) return;
+    if (!settings.fxWeather) {
+      if (rainLines.visible) rainLines.visible = false;
+      return;
+    }
     const rain = weatherRain;
     if (rain < 0.02) {
       if (rainLines.visible) rainLines.visible = false;
@@ -784,6 +817,7 @@
   }
 
   function triggerLightning() {
+    if (!settings.fxWeather) return;
     lightningFlash = 1;
     Sfx.thunder();
   }
@@ -812,7 +846,7 @@
     applyWeather();
     updateClouds(dt);
     updateRain(dt);
-    Sfx.setRain(weatherRain);
+    Sfx.setRain(settings.fxWeather ? weatherRain : 0);
     updateWeatherHUD();
     // lightning white-out overlay
     if (lightningEl) {
@@ -2871,9 +2905,10 @@
       else { startReload(false); Sfx.click(); }
     }
     else if (code === 'KeyC') recenterCamera();
-    else if (code === 'BracketRight') { sensScale = Math.min(3, sensScale * 1.15); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
-    else if (code === 'BracketLeft') { sensScale = Math.max(0.4, sensScale / 1.15); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
-    else if (code === 'KeyY') { invertY = !invertY; toast(invertY ? 'Đảo trục dọc: BẬT' : 'Đảo trục dọc: TẮT'); Sfx.click(); }
+    else if (code === 'BracketRight') { sensScale = Math.min(3, sensScale * 1.15); settings.sens = sensScale; saveSettings(); syncSettingsUI(); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
+    else if (code === 'BracketLeft') { sensScale = Math.max(0.4, sensScale / 1.15); settings.sens = sensScale; saveSettings(); syncSettingsUI(); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
+    else if (code === 'KeyY') { invertY = !invertY; settings.invertY = invertY; saveSettings(); syncSettingsUI(); toast(invertY ? 'Đảo trục dọc: BẬT' : 'Đảo trục dọc: TẮT'); Sfx.click(); }
+    else if (code === 'KeyM') { openPause(); }
     else if (code === 'KeyT') {
       const order = ['clear', 'cloudy', 'rain', 'storm'];
       const next = order[(order.indexOf(weatherState) + 1) % order.length];
@@ -3722,9 +3757,16 @@
     return a + d * t;
   }
 
+  let fpsFrames = 0, fpsAcc = 0;
   function animate() {
     requestAnimationFrame(animate);
     const dt = Math.min(0.05, clock.getDelta());
+    if (paused) { renderer.render(scene, camera); return; }   // menus freeze the sim
+    fpsFrames++; fpsAcc += dt;
+    if (fpsAcc >= 0.5) {
+      if (settings.showFps && fpsN) fpsN.textContent = Math.round(fpsFrames / fpsAcc);
+      fpsFrames = 0; fpsAcc = 0;
+    }
 
     // snapshot the pre-step state so rendering can interpolate smoothly
     cars.forEach(c => { c.prevPos.copy(c.pos); c.prevHeading = c.heading; });
@@ -3787,9 +3829,140 @@
     renderer.render(scene, camera);
   }
 
+  /* ---------------- Menus, settings and pause ---------------- */
+  const startOverlay = document.getElementById('startOverlay');
+  const pauseOverlay = document.getElementById('pauseOverlay');
+  const settingsOverlay = document.getElementById('settingsOverlay');
+  const aboutOverlay = document.getElementById('aboutOverlay');
+  const fpsBox = document.getElementById('fpsBox');
+  const fpsN = document.getElementById('fpsN');
+  let menuReturn = 'start';
+  let paused = false;
+
+  function showOverlay(el) { if (el) el.classList.remove('hidden'); }
+  function hideOverlay(el) { if (el) el.classList.add('hidden'); }
+  function hideGameOverlays() {
+    hideOverlay(pauseOverlay); hideOverlay(settingsOverlay); hideOverlay(aboutOverlay);
+  }
+  function openSettings(from) {
+    menuReturn = from || 'start';
+    hideOverlay(startOverlay); hideOverlay(pauseOverlay); hideOverlay(aboutOverlay);
+    showOverlay(settingsOverlay);
+    syncSettingsUI();
+  }
+  function openAbout(from) {
+    menuReturn = from || 'start';
+    hideOverlay(startOverlay); hideOverlay(pauseOverlay); hideOverlay(settingsOverlay);
+    showOverlay(aboutOverlay);
+  }
+  function backToMenu() {
+    hideOverlay(settingsOverlay); hideOverlay(aboutOverlay);
+    if (menuReturn === 'pause') showOverlay(pauseOverlay);
+    else showOverlay(startOverlay);
+  }
+  function openPause() {
+    if (!player || player.dead) return;
+    paused = true;
+    if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
+    hideOverlay(settingsOverlay); hideOverlay(aboutOverlay);
+    showOverlay(pauseOverlay);
+  }
+  function resumeGame() {
+    hideGameOverlays();
+    paused = false;
+    tryPointerLock();
+  }
+
+  function applyAudioSettings() {
+    if (!Sfx.master) return;
+    Sfx.master.gain.value = settings.muted ? 0 : (settings.volume / 100) * 0.35;
+  }
+  function syncSettingsUI() {
+    const q = document.getElementById('qQuality'); if (q) q.value = settings.quality;
+    const fov = document.getElementById('qFov'); if (fov) fov.value = settings.fov;
+    const fovV = document.getElementById('qFovVal'); if (fovV) fovV.textContent = settings.fov;
+    const wfx = document.getElementById('qWeather'); if (wfx) wfx.checked = !!settings.fxWeather;
+    const fpsC = document.getElementById('qFps'); if (fpsC) fpsC.checked = !!settings.showFps;
+    const sens = document.getElementById('cSens'); if (sens) sens.value = Math.round(settings.sens * 100);
+    const sensV = document.getElementById('cSensVal'); if (sensV) sensV.textContent = Math.round(settings.sens * 100) + '%';
+    const inv = document.getElementById('cInvert'); if (inv) inv.checked = !!settings.invertY;
+    const vol = document.getElementById('aVol'); if (vol) vol.value = settings.volume;
+    const volV = document.getElementById('aVolVal'); if (volV) volV.textContent = settings.volume;
+    const mute = document.getElementById('aMute'); if (mute) mute.checked = !!settings.muted;
+    if (fpsBox) fpsBox.classList.toggle('hidden', !settings.showFps);
+  }
+  function applySettings() {
+    sensScale = settings.sens;
+    invertY = !!settings.invertY;
+    if (renderer) {
+      const pr = settings.quality === 'low' ? 0.75 : settings.quality === 'high'
+        ? Math.min(window.devicePixelRatio || 1, 1.5) : 1;
+      renderer.setPixelRatio(pr);
+      renderer.setSize(W, H, false);
+    }
+    if (camera) { camera.fov = settings.fov; camera.updateProjectionMatrix(); }
+    if (cloudGroup) cloudGroup.visible = !!settings.fxWeather;
+    if (rainLines && !settings.fxWeather) rainLines.visible = false;
+    applyAudioSettings();
+    if (fpsBox) fpsBox.classList.toggle('hidden', !settings.showFps);
+    saveSettings();
+    syncSettingsUI();
+  }
+
+  function bindMenu() {
+    const on = (id, ev, fn) => { const el = document.getElementById(id); if (el) el.addEventListener(ev, fn); };
+    on('startBtn', 'click', start);
+    on('settingsBtn', 'click', () => openSettings('start'));
+    on('aboutBtn', 'click', () => openAbout('start'));
+    on('settingsBackBtn', 'click', backToMenu);
+    on('aboutBackBtn', 'click', backToMenu);
+    on('menuBtn', 'click', openPause);
+    on('resumeBtn', 'click', resumeGame);
+    on('pauseSettingsBtn', 'click', () => openSettings('pause'));
+    on('pauseAboutBtn', 'click', () => openAbout('pause'));
+
+    const tabs = document.querySelectorAll ? document.querySelectorAll('.tab') : [];
+    Array.prototype.forEach.call(tabs, tab => {
+      tab.addEventListener('click', () => {
+        Array.prototype.forEach.call(tabs, t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const map = { gfx: 'tabGfx', ctl: 'tabCtl', aud: 'tabAud' };
+        Object.keys(map).forEach(k => {
+          const body = document.getElementById(map[k]);
+          if (body) body.classList.toggle('hidden', k !== tab.dataset.tab);
+        });
+      });
+    });
+
+    on('qQuality', 'change', e => { settings.quality = e.target.value; applySettings(); });
+    on('qFov', 'input', e => {
+      settings.fov = +e.target.value;
+      if (camera) { camera.fov = settings.fov; camera.updateProjectionMatrix(); }
+      const v = document.getElementById('qFovVal'); if (v) v.textContent = settings.fov;
+      saveSettings();
+    });
+    on('qWeather', 'change', e => { settings.fxWeather = !!e.target.checked; applySettings(); });
+    on('qFps', 'change', e => { settings.showFps = !!e.target.checked; applySettings(); });
+    on('cSens', 'input', e => {
+      settings.sens = (+e.target.value) / 100;
+      sensScale = settings.sens;
+      const v = document.getElementById('cSensVal'); if (v) v.textContent = Math.round(settings.sens * 100) + '%';
+      saveSettings();
+    });
+    on('cInvert', 'change', e => { settings.invertY = !!e.target.checked; invertY = settings.invertY; saveSettings(); });
+    on('aVol', 'input', e => {
+      settings.volume = +e.target.value;
+      applyAudioSettings();
+      const v = document.getElementById('aVolVal'); if (v) v.textContent = settings.volume;
+      saveSettings();
+    });
+    on('aMute', 'change', e => { settings.muted = !!e.target.checked; applyAudioSettings(); saveSettings(); });
+  }
+
   /* ---------------- Boot ---------------- */
   function start() {
     Sfx.init();
+    applyAudioSettings();
     buildCity();
     spawnWorld();
     player = createPlayer();
@@ -3810,14 +3983,19 @@
     updateShotsHUD();
     updateVehicleHUD();
     mouse.down = false; aimHeld = false;
-    document.getElementById('startOverlay').classList.add('hidden');
-    toast('Chào mừng đến VICE CITY! CHUỘT xoay camera · CLICK TRÁI tấn công.');
+    paused = false;
+    hideOverlay(startOverlay);
+    hideGameOverlays();
+    if (camera) { camera.fov = settings.fov; camera.updateProjectionMatrix(); }
+    toast('Chào mừng đến VICE CITY! Ấn ☰ (hoặc M) để mở MENU.');
     tryPointerLock();
     animate();
   }
 
   initThree();
   bindInput();
+  bindMenu();
+  applySettings();
   window.addEventListener('resize', () => {
     W = window.innerWidth; H = window.innerHeight;
     camera.aspect = W / H; camera.updateProjectionMatrix();
@@ -3825,7 +4003,6 @@
     canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   });
 
-  document.getElementById('startBtn').addEventListener('click', start);
   document.getElementById('respawnBtn').addEventListener('click', respawn);
   // ?autostart=1 — skip the intro overlay (used by automated screenshot checks)
   if (window.location && /autostart/.test(window.location.search || '')) start();
@@ -3853,6 +4030,15 @@
       if (pitch !== undefined) camPitch = Math.max(CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX, pitch));
       freeLookT = 0;
     },
+    get settings() { return Object.assign({}, settings); },
+    setSetting(key, value) {
+      if (!(key in settings)) return;
+      settings[key] = value;
+      applySettings();
+    },
+    get paused() { return paused; },
+    openPause,
+    resumeGame,
     setWeather,
     strikeLightning: triggerLightning,
     setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },

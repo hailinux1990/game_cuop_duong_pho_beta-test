@@ -878,5 +878,45 @@ check('clock still labels GMT+7', els.clockZone.textContent === 'GMT+7');
 key('KeyG'); step(1);
 check('G randomizes the time of day', ['SÁNG', 'CHIỀU', 'TỐI'].indexOf(els.timePhase.textContent) >= 0);
 
+
+/* ================= TEST 28: main menu, settings and pause ====================== */
+const uiHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+check('main menu has Start / Settings / About', ['id="startBtn"', 'id="settingsBtn"', 'id="aboutBtn"'].every(id => uiHtml.indexOf(id) >= 0));
+check('settings panel has graphics / controls / audio tabs',
+  ['id="settingsOverlay"', 'id="qQuality"', 'id="qFov"', 'id="qWeather"', 'id="qFps"', 'id="cSens"', 'id="cInvert"', 'id="aVol"', 'id="aMute"'].every(id => uiHtml.indexOf(id) >= 0));
+check('about panel exists', uiHtml.indexOf('id="aboutOverlay"') >= 0);
+check('in-game menu button + pause menu exist', uiHtml.indexOf('id="menuBtn"') >= 0 && uiHtml.indexOf('id="pauseOverlay"') >= 0);
+check('old text-lines hint block removed from the HUD', uiHtml.indexOf('id="hint"') === -1);
+
+G.setSetting('fov', 70);
+check('graphics: FOV can be changed from settings (fov=' + G.camera.fov + ')', G.camera.fov === 70);
+G.setSetting('sens', 2);
+check('controls: mouse sensitivity can be changed from settings', Math.abs(G.cameraState.sens - 2) < 1e-6);
+G.setSetting('invertY', true);
+check('controls: invert-Y can be toggled from settings', G.cameraState.invertY === true);
+G.setSetting('quality', 'low');
+check('graphics: quality can be switched to low', G.settings.quality === 'low');
+G.setSetting('showFps', true);
+check('graphics: FPS counter can be enabled', G.settings.showFps === true);
+G.setSetting('fxWeather', false);
+check('graphics: weather effects can be disabled', G.settings.fxWeather === false);
+
+// starting the game from the menu works
+G.respawn();
+player.hp = player.maxHp;
+document.getElementById('menuBtn')._h.click[0]();
+check('menu button pauses the game', G.paused === true);
+document.getElementById('resumeBtn')._h.click[0]();
+check('resume button unpauses', G.paused === false);
+
+// restore sensible defaults for anything that runs later
+G.setSetting('fov', 62);
+G.setSetting('sens', 1);
+G.setSetting('invertY', false);
+G.setSetting('quality', 'medium');
+G.setSetting('showFps', false);
+G.setSetting('fxWeather', true);
+check('settings can be restored to defaults', G.settings.fov === 62 && G.settings.quality === 'medium');
+
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

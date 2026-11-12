@@ -57,26 +57,51 @@
   @keyframes floatUp { from { opacity:1; } to { opacity:0; margin-top:-30px; } }
   #msg { bottom:118px; left:50%; transform:translateX(-50%); text-align:center; font-size:13px; letter-spacing:1px; color:#ffe06a; opacity:0; transition:opacity .3s; white-space:nowrap; }
   #carPrompt { bottom:152px; left:50%; transform:translateX(-50%); padding:6px 16px; border:2px solid #000; background:rgba(18,8,26,.72); box-shadow:0 0 0 2px rgba(255,111,181,.55); color:var(--cyan); font-size:13px; letter-spacing:2px; white-space:nowrap; }
-  #hint { top:196px; right:14px; text-align:right; font-size:11px; line-height:1.7; color:#eee; }
-  #hint b { color:var(--cyan); }
-  /* ---- Minimap ---- */
-  #minimapBox { top:14px; right:14px; border:2px solid #000; box-shadow:0 0 0 2px rgba(255,111,181,.55); background:#000; }
-  #minimap { display:block; image-rendering: pixelated; }
-  #minimapBox .caption { font-size:9px; letter-spacing:2px; color:var(--cyan); text-align:center; padding:2px 0; }
-  /* ---- Overlays ---- */
-  .overlay { position:fixed; inset:0; z-index:20; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(14,4,20,.82); color:#fff; text-align:center; }
-  .overlay h1 { font-size:44px; letter-spacing:5px; color:var(--ui); text-shadow:3px 3px 0 #000, 0 0 24px rgba(255,79,154,.65); margin-bottom:6px; }
-  .overlay .sub { font-size:13px; color:#ffc9e6; letter-spacing:2px; margin-bottom:22px; }
-  .overlay .controls { font-size:13px; line-height:2; color:#eee; }
-  .overlay .controls b { color:var(--cyan); }
-  .btn { pointer-events:auto; cursor:pointer; margin-top:22px; padding:12px 30px; font-family:inherit; font-size:16px; letter-spacing:3px; color:#12040f; background:var(--ui); border:3px solid #000; box-shadow:0 0 0 3px #fff, 0 0 26px rgba(255,79,154,.7); text-transform:uppercase; }
-  .btn:hover { background:#ffd0e8; }
   /* ---- Live clock (GMT+7) + weather status ---- */
   #clockBox { top:14px; left:50%; transform:translateX(-50%); text-align:center; padding:6px 16px; border:2px solid #000; background:rgba(18,8,26,.62); box-shadow:0 0 0 2px rgba(79,240,232,.45); }
   #clockTime { font-size:20px; letter-spacing:3px; color:var(--cyan); text-shadow:2px 2px 0 #000; }
   #clockSub { font-size:10px; letter-spacing:2px; color:#ffb8dd; margin-top:2px; }
   #clockSub #weatherLabel { color:#ffd25e; }
   #lightning { position:fixed; inset:0; z-index:7; pointer-events:none; background:#fff; opacity:0; }
+  /* ---- Minimap ---- */
+  #minimapBox { top:14px; right:14px; border:2px solid #000; box-shadow:0 0 0 2px rgba(255,111,181,.55); background:#000; }
+  #minimap { display:block; image-rendering: pixelated; }
+  #minimapBox .caption { font-size:9px; letter-spacing:2px; color:var(--cyan); text-align:center; padding:2px 0; }
+  /* ---- In-game menu button + FPS ---- */
+  #menuBtn { top:196px; right:14px; z-index:12; pointer-events:auto; cursor:pointer;
+             width:46px; height:40px; padding:0; font-family:inherit; font-size:18px;
+             color:var(--cyan); background:rgba(18,8,26,.7); border:2px solid #000;
+             box-shadow:0 0 0 2px rgba(79,240,232,.5); }
+  #menuBtn:hover { background:#ffd0e8; color:#12040f; }
+  #fpsBox { top:128px; left:14px; font-size:11px; letter-spacing:1px; color:#8ff; }
+  /* ---- Overlays / menus ---- */
+  .overlay { position:fixed; inset:0; z-index:20; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(14,4,20,.82); color:#fff; text-align:center; }
+  .overlay h1 { font-size:44px; letter-spacing:5px; color:var(--ui); text-shadow:3px 3px 0 #000, 0 0 24px rgba(255,79,154,.65); margin-bottom:6px; }
+  .overlay .sub { font-size:13px; color:#ffc9e6; letter-spacing:2px; margin-bottom:22px; }
+  .menu { display:flex; flex-direction:column; gap:12px; align-items:center; }
+  .btn { pointer-events:auto; cursor:pointer; padding:12px 30px; font-family:inherit; font-size:16px; letter-spacing:3px; color:#12040f; background:var(--ui); border:3px solid #000; box-shadow:0 0 0 3px #fff, 0 0 26px rgba(255,79,154,.7); text-transform:uppercase; }
+  .btn:hover { background:#ffd0e8; }
+  .btn.small { font-size:13px; padding:9px 22px; letter-spacing:2px; background:transparent; color:var(--cyan); box-shadow:0 0 0 2px rgba(79,240,232,.5); }
+  .btn.small:hover { background:rgba(79,240,232,.15); color:#fff; }
+  .panel { pointer-events:auto; width:min(560px, 92vw); max-height:88vh; overflow:auto; padding:22px 26px 26px;
+           background:rgba(20,8,30,.96); border:2px solid #000; box-shadow:0 0 0 3px rgba(255,111,181,.5), 0 0 40px rgba(0,0,0,.6); }
+  .panel h1 { font-size:28px; letter-spacing:4px; margin-bottom:14px; }
+  .panel .tabs { display:flex; gap:6px; margin-bottom:14px; }
+  .panel .tab { cursor:pointer; flex:1; padding:8px 4px; font-family:inherit; font-size:12px; letter-spacing:1px;
+                color:#ffc9e6; background:transparent; border:2px solid rgba(255,111,181,.35); }
+  .panel .tab.active { color:#12040f; background:var(--ui); border-color:#000; }
+  .tabBody { text-align:left; }
+  .row { display:flex; align-items:center; gap:10px; margin:12px 0; font-size:13px; color:#eee; letter-spacing:1px; }
+  .row input[type="range"] { flex:1; accent-color:var(--ui); }
+  .row select { font-family:inherit; background:#120a1c; color:#fff; border:2px solid var(--ui); padding:5px 8px; }
+  .row input[type="checkbox"] { width:16px; height:16px; accent-color:var(--ui); }
+  .row span { min-width:56px; text-align:right; color:var(--cyan); font-size:12px; }
+  .keys { margin-top:10px; padding:10px 12px; border:2px dashed rgba(255,111,181,.35); text-align:left; font-size:12px; line-height:1.9; color:#ddd; }
+  .keys b { color:var(--cyan); }
+  .about ul { text-align:left; margin:10px 0 14px 18px; font-size:13px; line-height:1.8; color:#ddd; }
+  .about p { font-size:13px; line-height:1.8; color:#eee; text-align:left; }
+  .about .fine { color:#999; font-size:11px; margin:12px 0 18px; }
+  .panelBtns { display:flex; justify-content:center; margin-top:18px; }
   #wasted { background:rgba(60,0,20,.85); }
   #wasted h1 { color:#f33; text-shadow:3px 3px 0 #000, 0 0 24px rgba(255,40,40,.6); }
   #flash { position:fixed; inset:0; z-index:8; pointer-events:none; background:#f00; opacity:0; }
@@ -86,13 +111,7 @@
 <body>
   <canvas id="game"></canvas>
   <div id="flash"></div>
-
   <div id="lightning"></div>
-
-  <div id="clockBox" class="hud">
-    <div id="clockTime">--:--:--</div>
-    <div id="clockSub"><span id="clockZone">GMT+7</span> · <span id="timePhase">CHIỀU</span> · <span id="weatherLabel">☀ NẮNG</span></div>
-  </div>
 
   <!-- HUD -->
   <div id="healthBox" class="hud">
@@ -126,12 +145,9 @@
 
   <div id="carPrompt" class="hud hidden"></div>
 
-  <div id="hint" class="hud">
-    <b>WASD</b> di chuyển (hướng camera) &nbsp; <b>SHIFT</b> chạy<br>
-    <b>CHUỘT</b> xoay camera trái·phải·lên·xuống (click để khoá chuột)<br>
-    <b>CLICK TRÁI</b> bắn/đánh &nbsp; <b>CLICK PHẢI (giữ)</b> ngắm &nbsp; <b>LĂN CHUỘT</b> zoom<br>
-    <b>E</b> lên xe / TRỘM XE &nbsp; <b>C</b> chỉnh camera sau lưng &nbsp; <b>1·2·3·4</b> đổi vũ khí &nbsp; <b>R</b> nạp đạn<br>
-    <b>[ ]</b> độ nhạy chuột &nbsp; <b>Y</b> đảo trục dọc &nbsp; <b>T</b> đổi thời tiết &nbsp; <b>G</b> đổi giờ ngẫu nhiên
+  <div id="clockBox" class="hud">
+    <div id="clockTime">--:--:--</div>
+    <div id="clockSub"><span id="clockZone">GMT+7</span> · <span id="timePhase">CHIỀU</span> · <span id="weatherLabel">☀ NẮNG</span></div>
   </div>
 
   <div id="minimapBox" class="hud">
@@ -139,25 +155,86 @@
     <div class="caption">MAP</div>
   </div>
 
-  <!-- Start overlay -->
+  <button id="menuBtn" class="hud" title="Menu (Esc mở khoá chuột rồi bấm)">☰</button>
+  <div id="fpsBox" class="hud hidden">FPS: <span id="fpsN">0</span></div>
+
+  <!-- Main menu -->
   <div id="startOverlay" class="overlay">
     <h1>PIXEL VICE CITY</h1>
     <div class="sub">OPEN WORLD · 3D THIRD-PERSON · GTA VICE CITY STYLE</div>
-    <div class="controls">
-      <b>WASD</b> — di chuyển theo hướng camera &nbsp;&nbsp; <b>SHIFT</b> — chạy<br>
-      <b>Chuột</b> — xoay camera trái/phải/lên/xuống (click để khoá chuột · ESC mở khoá · kéo chuột phải để xoay khi chưa khoá) &nbsp;&nbsp; <b>Lăn chuột</b> — zoom<br>
-      <b>Click trái</b> — đánh / bắn &nbsp;&nbsp; <b>Giữ chuột phải</b> — ngắm cận vai (tản đạn thấp hơn)<br>
-      <b>1 / 2 / 3 / 4</b> — tay · dao · súng lục (bắn từng phát) · <b>AK-47 (giữ chuột để bắn liên thanh)</b> &nbsp;&nbsp; <b>R</b> — nạp đạn (có thời gian nạp)<br>
-      <b>C</b> — chỉnh camera về sau lưng &nbsp;&nbsp; <b>[ / ]</b> — độ nhạy chuột &nbsp;&nbsp; <b>Y</b> — đảo trục dọc &nbsp;&nbsp; <b>T</b> — đổi thời tiết &nbsp;&nbsp; <b>G</b> — đổi giờ ngẫu nhiên<br>
-      <b>E</b> — lên xe / <b>TRỘM XE</b> đang có người lái<br><br>
-      🌴 Thành phố HOÀNG HÔN 11×11 block — 4 khu neon pastel, bãi biển, cầu vượt sông!<br>
-      🌦️ Thời tiết ngẫu nhiên NẮNG / MÂY ĐEN / MƯA / GIÔNG — GIỜ NGẪU NHIÊN SÁNG / CHIỀU / TỐI, đồng hồ GMT+7 chạy ở giữa trên màn hình!<br>
-      🚨 Có <b>SAO TRUY NÃ</b> → đội xe cảnh sát rượt khắp map, còi hú inh ỏi; xe áp sát DỪNG LẠI rồi <b>cảnh sát nhảy xuống bắn</b> bạn!<br>
-      💥 Bắn xe cộ vài phát để <b>NỔ TUNG</b> — xe nổ lan theo dây chuyền, xác cháy đen ở lại!<br>
-      Xe thường không thể cán chết bạn — chúng sẽ phanh và DỪNG khi bạn đứng trước!<br>
-      <span style="color:#888">🎧 Bật loa — có tiếng phố, xe cộ, chim hót, tiếng súng vang và còi cảnh sát.</span>
+    <div class="menu">
+      <button class="btn" id="startBtn">▶ BẮT ĐẦU</button>
+      <button class="btn" id="settingsBtn">⚙ CÀI ĐẶT</button>
+      <button class="btn" id="aboutBtn">ℹ GIỚI THIỆU</button>
     </div>
-    <button class="btn" id="startBtn">▶ BẮT ĐẦU</button>
+  </div>
+
+  <!-- Pause menu (in-game) -->
+  <div id="pauseOverlay" class="overlay hidden">
+    <h1>TẠM DỪNG</h1>
+    <div class="sub">TRÒ CHƠI ĐANG TẠM DỪNG</div>
+    <div class="menu">
+      <button class="btn" id="resumeBtn">▶ TIẾP TỤC</button>
+      <button class="btn" id="pauseSettingsBtn">⚙ CÀI ĐẶT</button>
+      <button class="btn" id="pauseAboutBtn">ℹ GIỚI THIỆU</button>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settingsOverlay" class="overlay hidden">
+    <div class="panel">
+      <h1>CÀI ĐẶT</h1>
+      <div class="tabs">
+        <button class="tab active" data-tab="gfx">ĐỒ HỌA</button>
+        <button class="tab" data-tab="ctl">ĐIỀU KHIỂN</button>
+        <button class="tab" data-tab="aud">ÂM THANH</button>
+      </div>
+      <div class="tabBody" id="tabGfx">
+        <label class="row">Chất lượng đồ họa
+          <select id="qQuality">
+            <option value="low">Thấp</option>
+            <option value="medium" selected>Trung bình</option>
+            <option value="high">Cao</option>
+          </select>
+        </label>
+        <label class="row">Tầm nhìn (FOV) <input type="range" id="qFov" min="50" max="80" step="1" value="62"><span id="qFovVal">62</span></label>
+        <label class="row"><input type="checkbox" id="qWeather" checked> Hiệu ứng mưa &amp; mây</label>
+        <label class="row"><input type="checkbox" id="qFps"> Hiện FPS</label>
+      </div>
+      <div class="tabBody hidden" id="tabCtl">
+        <label class="row">Độ nhạy chuột <input type="range" id="cSens" min="40" max="300" step="5" value="100"><span id="cSensVal">100%</span></label>
+        <label class="row"><input type="checkbox" id="cInvert"> Đảo trục dọc</label>
+        <div class="keys">
+          <div><b>WASD</b> di chuyển · <b>SHIFT</b> chạy</div>
+          <div><b>CHUỘT</b> xoay camera · <b>LĂN CHUỘT</b> zoom</div>
+          <div><b>CLICK TRÁI</b> bắn/đánh · <b>GIỮ CHUỘT PHẢI</b> ngắm</div>
+          <div><b>E</b> lên/xuống xe · <b>C</b> camera sau lưng</div>
+          <div><b>1·2·3·4</b> vũ khí · <b>R</b> nạp đạn</div>
+          <div><b>T</b> đổi thời tiết · <b>G</b> đổi giờ ngẫu nhiên</div>
+        </div>
+      </div>
+      <div class="tabBody hidden" id="tabAud">
+        <label class="row">Âm lượng tổng <input type="range" id="aVol" min="0" max="100" step="5" value="60"><span id="aVolVal">60</span></label>
+        <label class="row"><input type="checkbox" id="aMute"> Tắt âm thanh</label>
+      </div>
+      <div class="panelBtns"><button class="btn small" id="settingsBackBtn">← QUAY LẠI</button></div>
+    </div>
+  </div>
+
+  <!-- About -->
+  <div id="aboutOverlay" class="overlay hidden">
+    <div class="panel about">
+      <h1>GIỚI THIỆU</h1>
+      <p><b>PIXEL VICE CITY</b> — game thế giới mở 3D góc nhìn người thứ ba lấy cảm hứng từ GTA Vice City.</p>
+      <ul>
+        <li>Thành phố mở 11×11 block, 4 khu, sông + cầu, bãi biển, neon hoàng hôn.</li>
+        <li>104 người đi đường, 34 xe, 11 thuyền; truy nã 1–5 sao, cảnh sát truy đuổi, trộm xe, bắn nổ xe.</li>
+        <li>Vũ khí: tay, dao, súng lục, AK-47; auto-aim, nạp đạn có thời gian.</li>
+        <li>Thời tiết ngẫu nhiên nắng/mây/mưa/giông, giờ ngẫu nhiên SÁNG/CHIỀU/TỐI, đồng hồ GMT+7.</li>
+      </ul>
+      <p class="fine">Game nguyên bản dựng bằng code thủ tục, không sử dụng tài nguyên có bản quyền của Rockstar Games.</p>
+      <button class="btn small" id="aboutBackBtn">← QUAY LẠI</button>
+    </div>
   </div>
 
   <!-- Wasted overlay -->
@@ -167,6 +244,12 @@
     <button class="btn" id="respawnBtn">HỒI SINH</button>
   </div>
 
+  <script>
+    // boot diagnostics (harmless): collect any early runtime error for dev tools
+    window.__bootErrors = [];
+    window.addEventListener('error', e => window.__bootErrors.push(String(e.message || e)));
+    window.addEventListener('unhandledrejection', e => window.__bootErrors.push('promise: ' + String(e.reason)));
+  </script>
   <script src="lib/three.min.js"></script>
   <script src="js/game.js"></script>
 </body>
