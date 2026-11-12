@@ -1077,11 +1077,11 @@
     }
 
     // arms + hands (shoulder pivots keep the old animation contract)
-    const armL = M(G_ARM(), shirtM); armL.position.set(-shoulderX, 1.45, 0);
-    const armR = M(G_ARM(), shirtM); armR.position.set(shoulderX, 1.45, 0);
-    const handL = M(G_HAND(), skinM); handL.position.set(0, -0.56, 0.02);
+    const armR = M(G_ARM(), shirtM); armR.position.set(-shoulderX, 1.45, 0);   // right hand = local -X
+    const armL = M(G_ARM(), shirtM); armL.position.set(shoulderX, 1.45, 0);    // left hand  = local +X
     const handR = M(G_HAND(), skinM); handR.position.set(0, -0.56, 0.02);
-    armL.add(handL); armR.add(handR);
+    const handL = M(G_HAND(), skinM); handL.position.set(0, -0.56, 0.02);
+    armR.add(handR); armL.add(handL);
     add(armL); add(armR); parts.push(handL, handR);
 
     // legs + shoes
@@ -2188,20 +2188,21 @@
     npc.group.userData.legL.rotation.x = swing;
     npc.group.userData.legR.rotation.x = -swing;
     let armSwing = moving ? Math.sin(npc.anim + Math.PI) * (0.24 + spdK * 0.4) : 0;
-    npc.group.userData.armL.rotation.x = armSwing;
-    npc.group.userData.armR.rotation.x = -armSwing;
+    npc.group.userData.armR.rotation.x = armSwing;
+    npc.group.userData.armL.rotation.x = -armSwing;
     npc.group.userData.armL.rotation.z = 0;
     if (npc.shootT > 0) {
       npc.shootT -= dt;
-      npc.group.userData.armR.rotation.x = -1.55;      // gun arm raised to fire
+      npc.group.userData.armR.rotation.x = -1.55;      // right gun arm raised to fire
       npc.group.userData.armL.rotation.x = -1.05;
+      npc.group.userData.armL.rotation.z = -0.3;
       npc.group.rotation.z = 0;
     } else if (!moving) {
       npc.idleT = (npc.idleT || 0) + dt;
       const sway = Math.sin(npc.idleT * 1.5 + (npc.pathI || 0)) * 0.03;
       npc.group.rotation.z = sway;
-      npc.group.userData.armR.rotation.x = -sway * 0.5;
-      npc.group.userData.armL.rotation.x = sway * 0.5;
+      npc.group.userData.armR.rotation.x = sway * 0.5;
+      npc.group.userData.armL.rotation.x = -sway * 0.5;
     } else {
       npc.group.rotation.z = 0;
     }
@@ -2567,6 +2568,7 @@
     if (!c) { toast('Không có xe nào gần đây'); return; }
     player.inCar = c;
     c.driver = player;
+    c.laneOffset = 0;                      // the hero's car drives on its real centre
     openCarDoor(c, -1);                    // driver door swings open then shut
     player.vel.set(0, 0, 0);
     player.isMoving = false;
@@ -2654,7 +2656,7 @@
   // classic third-person mouse look: drag (or pointer-lock) steers the chase-cam
   function look(dx, dy) {
     if (!dx && !dy) return;
-    camYaw += dx * CAM_SENS * sensScale;
+    camYaw -= dx * CAM_SENS * sensScale;
     camPitch = Math.max(CAM_PITCH_MIN, Math.min(CAM_PITCH_MAX,
       camPitch - dy * CAM_SENS_Y * sensScale * (invertY ? -1 : 1)));
     while (camYaw > Math.PI) camYaw -= Math.PI * 2;
@@ -2902,8 +2904,8 @@
 
     // camera-relative: W walks away from the camera, A/D strafe
     const sy = Math.sin(camYaw), cy = Math.cos(camYaw);
-    const wx = cy * ix + sy * iz;
-    const wz = -sy * ix + cy * iz;
+    const wx = -cy * ix + sy * iz;      // screen-right × strafe + forward × walk
+    const wz = sy * ix + cy * iz;
 
     const sprinting = mi.sprint && moving;
     const maxSpd = player.speed * (sprinting ? player.sprint : 1) * (aimHeld ? 0.65 : 1);
@@ -2995,7 +2997,7 @@
     player.group.userData.armR.rotation.x = armRX;
     player.group.userData.armL.rotation.x = armLX;
     // support hand swings inward for a two-handed aim stance
-    player.group.userData.armL.rotation.z = (hasWeapon && aiming) ? 0.5 : 0;
+    player.group.userData.armL.rotation.z = (hasWeapon && aiming) ? -0.5 : 0;
 
     // attacks: AK-47 holds full-auto, the pistol fires once per click,
     // melee keeps swinging while the button is held
@@ -3016,7 +3018,7 @@
     let target = 0;
     if (mi.fwd > 0) target = 13;          // W = forward
     else if (mi.fwd < 0) target = -7;     // S = reverse
-    if (mi.right !== 0) car.heading += mi.right * dt * 1.6;   // A/D steer
+    if (mi.right !== 0) car.heading -= mi.right * dt * 1.6;   // A/D steer (D = screen-right)
     // eased throttle: the car has real weight instead of teleporting to speed
     car.curSpeed += (target - car.curSpeed) * Math.min(1, dt * 7);
     if (target === 0 && Math.abs(car.curSpeed) < 0.03) car.curSpeed = 0;
@@ -3099,8 +3101,8 @@
     const d = aiming ? Math.min(camDist, CAM_AIM_DIST) : camDist;
     out.copy(_pivot).addScaledVector(_fwd, -d);
     if (aiming) {                       // over-the-right-shoulder framing
-      out.x += Math.cos(la.yaw) * CAM_SHOULDER;
-      out.z += -Math.sin(la.yaw) * CAM_SHOULDER;
+      out.x += -Math.cos(la.yaw) * CAM_SHOULDER;
+      out.z += Math.sin(la.yaw) * CAM_SHOULDER;
       out.y += 0.1;
     }
     const gy = groundY(out.x, out.z);

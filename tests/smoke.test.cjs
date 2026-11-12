@@ -471,8 +471,9 @@ check('rotating the camera re-maps W to +x', player.pos.x - mx0 > 0.8 && Math.ab
 G.respawn(); G.setCameraLook(0, -0.17); G.snapCamera(); step(2);
 mx0 = player.pos.x; mz0 = player.pos.z;
 key('KeyD'); step(24); keyup('KeyD');
-check('D strafes right (+x) relative to the camera', player.pos.x - mx0 > 0.8 && Math.abs(player.pos.z - mz0) < 0.4);
-check('character turns toward the strafe direction (sin facing≈1)', Math.abs(Math.sin(player.facing) - 1) < 0.35);
+// screen-right of a camera looking +z is world -x
+check('D strafes toward screen-right (-x) relative to the camera', mx0 - player.pos.x > 0.8 && Math.abs(player.pos.z - mz0) < 0.4);
+check('character turns toward the strafe direction (sin facing≈-1)', Math.abs(Math.sin(player.facing) + 1) < 0.35);
 
 /* ================= TEST 16: driving chase-cam + speedometer ===================== */
 const driver = G.cars.find(c => !c.dead && c.isPolice && !c.driver);
@@ -488,6 +489,9 @@ const carNow = driver.group.position, camNow = G.camera.position;
 const behindDot = (camNow.x - carNow.x) * Math.sin(driver.heading) + (camNow.z - carNow.z) * Math.cos(driver.heading);
 check('driving camera swings behind the car (dot=' + behindDot.toFixed(2) + ')', behindDot < -1.5);
 check('speedometer reads while driving (' + els.speedN.textContent + ' km/h)', Number(els.speedN.textContent) > 10);
+const steerH0 = driver.heading;
+key('KeyD'); step(10); keyup('KeyD');
+check('D steers the car toward screen-right (heading decreases)', driver.heading < steerH0 - 0.02);
 key('KeyE');
 check('E steps out of the car again', player.inCar === null);
 
@@ -498,6 +502,7 @@ handlers.mousedown({ button: 2 });
 step(40);
 const d1 = Math.hypot(G.camera.position.x - player.pos.x, G.camera.position.z - player.pos.z);
 check('right mouse pulls the camera over the shoulder (' + d1.toFixed(2) + ' m)', d1 < d0 - 1);
+check('aim camera sits over the screen-right shoulder', G.camera.position.x - player.pos.x < -0.2);
 handlers.mouseup({ button: 2 });
 step(20);
 
@@ -519,8 +524,8 @@ G.snapCamera();
 step(2);
 const look0 = G.cameraState;
 handlers.mousemove({ clientX: 640, clientY: 360, movementX: 120, movementY: 0 });
-check('mouse right turns the camera (yaw +' + (G.cameraState.yaw - look0.yaw).toFixed(2) + ' rad)',
-  G.cameraState.yaw - look0.yaw > 0.1);
+check('mouse right turns the camera to screen-right (yaw ' + (G.cameraState.yaw - look0.yaw).toFixed(2) + ' rad)',
+  look0.yaw - G.cameraState.yaw > 0.1);
 handlers.mousemove({ clientX: 640, clientY: 360, movementX: -120, movementY: 0 });
 check('mouse left turns it back symmetrically', Math.abs(G.cameraState.yaw - look0.yaw) < 1e-6);
 const pitch0 = G.cameraState.pitch;
