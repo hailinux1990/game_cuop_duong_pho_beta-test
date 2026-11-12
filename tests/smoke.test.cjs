@@ -783,5 +783,57 @@ check('T hotkey cycles the weather (now ' + G.weather.state + ')', G.weather.sta
 G.setWeather('clear');
 step(2);
 
+
+/* ================= TEST 26: VC-style action animations & no aim icon ============ */
+G.setWeather('clear');
+G.respawn();
+step(2);
+key('Digit4');                       // AK-47
+step(30);                            // finish the draw
+G.scene.updateMatrixWorld(true);
+const handW = new THREE.Vector3();
+const akHandMount = G.player.group.userData.armR.children.find(ch => ch && ch.name === 'wp-ak');
+akHandMount.getWorldPosition(handW);
+check('gun is carried low at the hip while idle', handW.y > 0.85 && handW.y < 1.1);
+handlers.mousedown({ button: 2 });   // aim
+step(6);
+G.scene.updateMatrixWorld(true);
+akHandMount.getWorldPosition(handW);
+check('aiming raises the weapon to the shoulder (' + handW.y.toFixed(2) + ' m)', handW.y > 1.15);
+handlers.mouseup({ button: 2 });
+step(4);
+
+key('Digit1'); step(20);             // fists
+handlers.mousedown({ button: 0 });
+step(2);
+const swingT = G.player.meleeT;
+handlers.mouseup({ button: 0 });
+check('punch plays a swing animation', swingT > 0);
+step(40);
+
+G.respawn();
+let doorCar = G.cars.find(c => !c.dead);
+if (!doorCar) doorCar = G.spawnCruiser();
+doorCar.dead = false; doorCar.stolen = true; doorCar.driver = null;
+doorCar.driverMesh = null; doorCar.maxSpeed = 0; doorCar.curSpeed = 0;
+doorCar.heading = 0;
+doorCar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
+doorCar.group.position.copy(doorCar.pos);
+step(2);
+key('KeyE');
+step(6);
+const doorOpen = Math.abs(doorCar.group.userData.doorL.rotation.y) + Math.abs(doorCar.group.userData.doorR.rotation.y);
+check('car door swings open when the hero enters (' + doorOpen.toFixed(2) + ' rad)', doorOpen > 0.1);
+key('KeyE');
+step(60);
+const doorShut = Math.abs(doorCar.group.userData.doorL.rotation.y) + Math.abs(doorCar.group.userData.doorR.rotation.y);
+check('car door closes again after the animation', doorShut < 0.02);
+
+const hudHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+check('aim reticle icon removed from the HUD', hudHtml.indexOf('id="crosshair"') === -1);
+let skirtCount = 0;
+G.NPCs.forEach(n => { if (n.group.userData.skirt) skirtCount++; });
+check('female pedestrians wear skirts (' + skirtCount + ')', skirtCount >= 1);
+
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

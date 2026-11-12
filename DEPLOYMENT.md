@@ -113,7 +113,7 @@ cd game_test_gta
 node tests/smoke.test.cjs
 ```
 
-All 149 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
+All 156 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
 
 ### Mobile/iPad
 - Works with touch controls
@@ -146,7 +146,7 @@ Just upload all files (`index.html`, `js/`, `lib/`, `LICENSE`) to the root direc
 - Shift: Run
 - Mouse: Orbit the chase-camera 360° horizontally and up/down (click to lock the pointer, ESC to unlock; without lock: hold right button still to aim, drag to orbit)
 - Wheel: Zoom the camera
-- Left click: Attack / shoot at the centre crosshair (pistol = one shot per click, AK-47 = hold for full auto)
+- Left click: Attack / shoot toward the centre of the camera (no reticle icon; GTA-style auto-aim; pistol = one shot per click, AK-47 = hold for full auto)
 - Right click (hold still): Over-the-shoulder aim zoom, tighter spread, steadier recoil
 - C: Snap the camera back behind the hero / car
 - [ / ]: Mouse sensitivity down / up   ·   Y: Invert vertical look

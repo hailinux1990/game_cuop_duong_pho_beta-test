@@ -958,6 +958,7 @@
   const G_TORSO = () => sg('torso', () => { const g = new THREE.CylinderGeometry(0.225, 0.185, 0.56, 8); g.scale(1, 1, 0.78); return g; });
   const G_PELVIS = () => sg('pelvis', () => new THREE.BoxGeometry(0.34, 0.2, 0.26));
   const G_BELT = () => sg('belt', () => new THREE.BoxGeometry(0.35, 0.05, 0.27));
+  const G_SKIRT = () => sg('skirt', () => new THREE.CylinderGeometry(0.3, 0.42, 0.42, 8));
   const G_ARM = () => sg('arm', () => { const g = new THREE.CylinderGeometry(0.06, 0.072, 0.56, 6); g.translate(0, -0.28, 0); return g; });
   const G_HAND = () => sg('hand', () => new THREE.BoxGeometry(0.13, 0.14, 0.14));
   const G_LEG = () => sg('leg', () => { const g = new THREE.CylinderGeometry(0.078, 0.09, 0.8, 7); g.translate(0, -0.4, 0); return g; });
@@ -1017,6 +1018,8 @@
     const shirtM = opt.shirtTex ? new THREE.MeshLambertMaterial({ map: opt.shirtTex }) : mat(shirt);
     const shoeM = mat(opt.shoe || 0x18171c), eyeM = mat(0x141416), whiteM = mat(0xf2efe6), detailM = mat(0x2a1c14);
     const shoulderX = female ? 0.26 : 0.29;
+    const skirt = !!opt.skirt;
+    const legsMat = skirt ? skinM : pantsM;
     const parts = [];
     const add = (m) => { g.add(m); parts.push(m); return m; };
     const M = (geo, material) => new THREE.Mesh(geo, material);
@@ -1026,6 +1029,11 @@
     const belt = M(G_BELT(), mat(opt.belt || 0x24242a)); belt.position.set(0, 1.03, 0);
     const torso = M(G_TORSO(), shirtM); torso.position.set(0, 1.28, 0); torso.scale.x = female ? 0.92 : 1;
     add(pelvis); add(belt); add(torso);
+    let skirtMesh = null;
+    if (skirt) {
+      skirtMesh = M(G_SKIRT(), mat(opt.skirtColor || pants)); skirtMesh.position.set(0, 0.78, 0);
+      add(skirtMesh);
+    }
 
     // neck + head + jaw
     const neck = M(G_NECK(), skinM); neck.position.set(0, 1.585, 0); add(neck);
@@ -1077,8 +1085,8 @@
     add(armL); add(armR); parts.push(handL, handR);
 
     // legs + shoes
-    const legL = M(G_LEG(), pantsM); legL.position.set(-0.105, 0.81, 0);
-    const legR = M(G_LEG(), pantsM); legR.position.set(0.105, 0.81, 0);
+    const legL = M(G_LEG(), legsMat); legL.position.set(-0.105, 0.81, 0);
+    const legR = M(G_LEG(), legsMat); legR.position.set(0.105, 0.81, 0);
     const shoeL = M(G_SHOE(), shoeM); shoeL.position.set(0, -0.745, 0.04);
     const shoeR = M(G_SHOE(), shoeM); shoeR.position.set(0, -0.745, 0.04);
     legL.add(shoeL); legR.add(shoeR);
@@ -1098,7 +1106,7 @@
 
     g.userData = {
       body: torso, head, hair, legL, legR, armL, armR, shoeL, shoeR, handL, handR,
-      pelvis, belt, neck, jaw, parts
+      pelvis, belt, neck, jaw, skirt: skirtMesh, parts
     };
     return g;
   }
@@ -1135,11 +1143,40 @@
       g.add(bar, lr, lb);
       g.userData.lightRed = lr; g.userData.lightBlue = lb;
     }
+    // animated side doors (hinged at the front edge)
+    const doorGeo = new THREE.BoxGeometry(0.06, 0.5, 1.1);
+    const doorL = new THREE.Mesh(doorGeo, mat(bodyC));
+    const doorR = new THREE.Mesh(doorGeo, mat(bodyC));
+    const hingeL = new THREE.Group(); hingeL.position.set(-0.86, 0.62, 0.6); doorL.position.set(0, 0, -0.55); hingeL.add(doorL);
+    const hingeR = new THREE.Group(); hingeR.position.set(0.86, 0.62, 0.6); doorR.position.set(0, 0, -0.55); hingeR.add(doorR);
+    g.add(hingeL, hingeR);
     g.add(blobShadow(1.1));
     g.userData.wheels = wheels;
     g.userData.body = body;
     g.userData.cabin = cabin; g.userData.hood = hood; g.userData.trunk = trunk;
+    g.userData.doorL = hingeL; g.userData.doorR = hingeR;
+    g.userData.doorMeshes = [doorL, doorR];
     return g;
+  }
+
+  // swing the driver/passenger door open then shut after a car entry/exit
+  function openCarDoor(car, side) {
+    car.doorT = 0.0001;
+    car.doorSide = side === 1 ? 1 : -1;
+  }
+  function updateCarDoor(car, dt) {
+    if (!car.doorT) return;
+    car.doorT += dt;
+    const t = car.doorT;
+    let a = 0;
+    if (t < 0.22) a = t / 0.22;
+    else if (t < 0.5) a = 1;
+    else if (t < 0.8) a = 1 - (t - 0.5) / 0.3;
+    else { car.doorT = 0; }
+    const ang = a * 1.05;
+    const u = car.group.userData;
+    if (u.doorL) u.doorL.rotation.y = car.doorSide === 1 ? 0 : ang;
+    if (u.doorR) u.doorR.rotation.y = car.doorSide === 1 ? -ang : 0;
   }
 
   // small driver figure seated inside the cabin (visible through the cabin)
@@ -1249,7 +1286,8 @@
       shotsFired: 0,
       wanted: 0, crimeTimer: 0, speed: 6.4, sprint: 1.65,
       inCar: null, muzzle,
-      facing: 0, anim: 0, isMoving: false, targetSeen: false,
+      facing: 0, anim: 0, idleT: 0, meleeT: 0, meleeTotal: 0.32,
+      isMoving: false, targetSeen: false,
       switchT: 0, reloadT: 0, reloadTotal: 0, recoil: 0, bloom: 0,
       attackCd: 0, shotCd: 0, dead: false, lastFire: 0
     };
@@ -1337,6 +1375,10 @@
       };
       if (rng() < 0.45) {
         opt.shirtTex = shirtTexture(opt.shirt, PRINT_ACCENTS[(rng() * PRINT_ACCENTS.length) | 0], (rng() * 4) | 0);
+      }
+      if (female && rng() < 0.55) {
+        opt.skirt = true;
+        opt.skirtColor = [0xff6f91, 0x40e0d0, 0xffd166, 0x9b7bff, 0xf3f0e4, 0x2b3140][(rng() * 6) | 0];
       }
     }
     const g = makeHuman(opt);
@@ -1916,6 +1958,7 @@
   function meleeAttack() {
     if (player.attackCd > 0) return;
     player.attackCd = 0.4;
+    player.meleeT = player.meleeTotal;     // play the punch / knife-swing animation
     const a = aimInfo();
     const isKnife = player.weapon === 1;
     Sfx[isKnife ? 'knife' : 'punch']();
@@ -1987,7 +2030,8 @@
     // scorched asphalt + charred wreck stays on the map
     spawnScorch(car.pos);
     const u = car.group.userData;
-    [u.body, u.cabin, u.hood, u.trunk].forEach(m => { if (m && m.material && m.material.color) m.material.color.setHex(0x181818); });
+    const wreckParts = [u.body, u.cabin, u.hood, u.trunk].concat(u.doorMeshes || []);
+    wreckParts.forEach(m => { if (m && m.material && m.material.color) m.material.color.setHex(0x181818); });
     if (u.lightRed) { u.lightRed.visible = false; u.lightBlue.visible = false; }
     if (car.driverMesh) { car.group.remove(car.driverMesh); car.driverMesh = null; }
     car.group.rotation.z += (rng() - 0.5) * 0.22;
@@ -2138,16 +2182,33 @@
     }
     npc.group.position.set(npc.pos.x, npc.pos.y, npc.pos.z);
     npc.group.rotation.y = npc.facing;
-    // limb animation
-    const swing = Math.sin(npc.anim) * 0.5;
+    // limb animation: stride grows with walking / fleeing speed
+    const spdK = Math.min(1, npc.speed / 4.6);
+    const swing = moving ? Math.sin(npc.anim) * (0.28 + spdK * 0.42) : 0;
     npc.group.userData.legL.rotation.x = swing;
     npc.group.userData.legR.rotation.x = -swing;
-    const armSwing = moving ? Math.sin(npc.anim + Math.PI) * 0.4 : 0;
+    let armSwing = moving ? Math.sin(npc.anim + Math.PI) * (0.24 + spdK * 0.4) : 0;
     npc.group.userData.armL.rotation.x = armSwing;
     npc.group.userData.armR.rotation.x = -armSwing;
+    npc.group.userData.armL.rotation.z = 0;
+    if (npc.shootT > 0) {
+      npc.shootT -= dt;
+      npc.group.userData.armR.rotation.x = -1.55;      // gun arm raised to fire
+      npc.group.userData.armL.rotation.x = -1.05;
+      npc.group.rotation.z = 0;
+    } else if (!moving) {
+      npc.idleT = (npc.idleT || 0) + dt;
+      const sway = Math.sin(npc.idleT * 1.5 + (npc.pathI || 0)) * 0.03;
+      npc.group.rotation.z = sway;
+      npc.group.userData.armR.rotation.x = -sway * 0.5;
+      npc.group.userData.armL.rotation.x = sway * 0.5;
+    } else {
+      npc.group.rotation.z = 0;
+    }
   }
 
   function policeShoot(npc) {
+    npc.shootT = 0.35;                    // raise the gun arm briefly
     const from = npc.pos.clone().setY(1.35);
     const to = player.pos.clone().setY(1.0);
     const dir = to.clone().sub(from).normalize();
@@ -2506,6 +2567,7 @@
     if (!c) { toast('Không có xe nào gần đây'); return; }
     player.inCar = c;
     c.driver = player;
+    openCarDoor(c, -1);                    // driver door swings open then shut
     player.vel.set(0, 0, 0);
     player.isMoving = false;
     player.stepT = 0;
@@ -2534,6 +2596,9 @@
     c.driver = null;
     c.curSpeed = 0;                    // the car stays parked where you leave it
     const spot = findExitSpot(c);
+    const rx = Math.cos(c.heading), rz = -Math.sin(c.heading);
+    const side = ((spot.x - c.pos.x) * rx + (spot.z - c.pos.z) * rz) > 0 ? 1 : -1;
+    openCarDoor(c, side);                  // door swings on the side the hero steps out
     player.pos.set(spot.x, 0, spot.z);
     player.group.position.set(spot.x, groundY(spot.x, spot.z), spot.z);
     player.vel.set(0, 0, 0);
@@ -2797,6 +2862,7 @@
     player.attackCd = Math.max(0, player.attackCd - dt);
     player.shotCd = Math.max(0, player.shotCd - dt);
     player.switchT = Math.max(0, player.switchT - dt);
+    player.meleeT = Math.max(0, player.meleeT - dt);
     player.bloom = Math.max(0, player.bloom - dt * BLOOM_DECAY);
     player.recoil = Math.max(0, player.recoil - dt * 6);
     if (player.reloadT > 0) {
@@ -2863,9 +2929,12 @@
       clampToWorld(player.pos);
     }
 
-    // stride-synced body bob (a few cm, only while really moving)
+    // stride-synced body bob while moving; a soft breathing sway while idle
+    if (speed < 0.25) player.idleT = (player.idleT || 0) + dt;
+    else player.idleT = 0;
     const bob = speed > 0.6 ? Math.abs(Math.sin(player.anim || 0)) * 0.03 : 0;
-    player.group.position.set(player.pos.x, groundY(player.pos.x, player.pos.z) + bob, player.pos.z);
+    const breathe = speed < 0.25 ? Math.sin((player.idleT || 0) * 2.0) * 0.006 : 0;
+    player.group.position.set(player.pos.x, groundY(player.pos.x, player.pos.z) + bob + breathe, player.pos.z);
 
     // facing: run toward the actual velocity, otherwise face the crosshair
     const aimFacing = Math.atan2(aim.dir.x, aim.dir.z);
@@ -2893,19 +2962,40 @@
       if (speed > 1.6) Sfx.step();
     }
 
-    // held weapon ready pose (gun up), natural arm swing when unarmed.
-    // The gun dips while drawing / reloading and kicks back when firing.
+    // ---- GTA-style action poses ----
+    // gun relaxed at the hip while walking; raised two-handed when aiming or
+    // firing; punch / knife swing on melee; recoil kick; draw & reload dip.
     const hasWeapon = player.weapon !== 0;
-    const armSwing = movingNow ? Math.sin(player.anim + Math.PI) * (0.35 + Math.min(1, speed / 6.4) * 0.2) : 0;
+    const aiming = aimHeld || (mouse.down && hasWeapon);
+    const speedK = Math.min(1, speed / 6.4);
+    const armSwing = movingNow ? Math.sin(player.anim + Math.PI) * (0.25 + speedK * 0.35) : 0;
+    const idleSway = speed < 0.25 ? Math.sin((player.idleT || 0) * 1.7) * 0.045 : 0;
     const kick = player.recoil * 0.35;
     let pose = 0;
-    if (player.switchT > 0) pose += (player.switchT / SWITCH_TIME) * 0.4;
+    if (player.switchT > 0) pose += (player.switchT / SWITCH_TIME) * 0.25;
     if (player.reloadT > 0) {
       const prog = Math.min(1, 1 - player.reloadT / Math.max(0.001, player.reloadTotal));
       pose += Math.sin(prog * Math.PI) * 0.45;
     }
-    player.group.userData.armR.rotation.x = (hasWeapon ? -1.3 : armSwing) + pose - kick;
-    player.group.userData.armL.rotation.x = (hasWeapon ? -1.25 : -armSwing) + pose * 0.7 - kick * 0.6;
+    let meleePunch = 0;
+    if (player.meleeT > 0) {
+      const p = 1 - player.meleeT / Math.max(0.001, player.meleeTotal);
+      meleePunch = Math.sin(p * Math.PI) * (player.weapon === 1 ? 0.75 : 1.15);
+    }
+    let armRX, armLX;
+    if (hasWeapon) {
+      armRX = (aiming ? -1.32 : -0.55) + (aiming ? 0 : armSwing * 0.35) + idleSway;
+      armLX = (aiming ? -1.12 : -0.55) - (aiming ? 0 : armSwing * 0.35) - idleSway;
+    } else {
+      armRX = armSwing + idleSway;
+      armLX = -armSwing - idleSway;
+    }
+    armRX += pose - kick - meleePunch;
+    armLX += pose * 0.7 - kick * 0.6 - meleePunch * 0.3;
+    player.group.userData.armR.rotation.x = armRX;
+    player.group.userData.armL.rotation.x = armLX;
+    // support hand swings inward for a two-handed aim stance
+    player.group.userData.armL.rotation.z = (hasWeapon && aiming) ? 0.5 : 0;
 
     // attacks: AK-47 holds full-auto, the pistol fires once per click,
     // melee keeps swinging while the button is held
@@ -3212,6 +3302,7 @@
   }
   let hitT = null;
   function hitMark() {
+    if (!crosshair) return;                // the reticle icon was removed from the HUD
     crosshair.classList.add('hit');
     clearTimeout(hitT);
     hitT = setTimeout(() => crosshair.classList.remove('hit'), 140);
@@ -3427,6 +3518,7 @@
           c.group.userData.lightBlue.visible = !on;
         }
       }
+      if (!c.dead && c.doorT) updateCarDoor(c, dt);
     });
 
     // walking characters follow the bridge decks / ramps too
