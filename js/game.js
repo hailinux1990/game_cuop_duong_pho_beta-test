@@ -299,28 +299,55 @@
   const canvas = document.getElementById('game');
   let renderer, scene, camera;
   let W = window.innerWidth, H = window.innerHeight;
-  let skyMesh = null, sunSprite = null;
+  let skyMesh = null, sunSprite = null, moonSprite = null, starField = null;
   let ambientLight = null, hemiLight = null, keyLight = null, rimLight = null;
   let cloudGroup = null, cloudMat = null;
   let rainLines = null;
 
   const _c = (hex) => new THREE.Color(hex);
 
-  function makeSkyTexture() {
+  const _skyTex = {};
+  const SKY_STOPS = {
+    morning: [
+      [0.00, '#143a70'], [0.30, '#3f7fbf'], [0.45, '#8fc6ee'],
+      [0.50, '#ffd9ae'], [0.55, '#ffe9cc'], [0.70, '#c9dff0'], [1.00, '#2a3550']
+    ],
+    afternoon: [
+      [0.00, '#0b0b26'], [0.30, '#26164a'], [0.42, '#6a2a6a'],
+      [0.47, '#c93f6e'], [0.50, '#ff8a5a'], [0.55, '#ffb078'],
+      [0.72, '#a04a72'], [1.00, '#241a2e']
+    ],
+    night: [
+      [0.00, '#02030b'], [0.35, '#0a0f26'], [0.48, '#141c3d'],
+      [0.52, '#20284a'], [0.60, '#33385e'], [0.75, '#2a2a4a'], [1.00, '#0a0a14']
+    ]
+  };
+  function makeSkyTexture(kind) {
+    const key = kind || 'afternoon';
+    if (_skyTex[key]) return _skyTex[key];
     const c = document.createElement('canvas');
     c.width = 32; c.height = 256;
     const g = c.getContext('2d');
     const grd = g.createLinearGradient(0, 0, 0, 256);
-    grd.addColorStop(0.00, '#0b0b26');
-    grd.addColorStop(0.30, '#26164a');
-    grd.addColorStop(0.42, '#6a2a6a');
-    grd.addColorStop(0.47, '#c93f6e');
-    grd.addColorStop(0.50, '#ff8a5a');
-    grd.addColorStop(0.55, '#ffb078');
-    grd.addColorStop(0.72, '#a04a72');
-    grd.addColorStop(1.00, '#241a2e');
+    (SKY_STOPS[key] || SKY_STOPS.afternoon).forEach(([at, col]) => grd.addColorStop(at, col));
     g.fillStyle = grd;
     g.fillRect(0, 0, 32, 256);
+    const tex = new THREE.CanvasTexture(c);
+    _skyTex[key] = tex;
+    return tex;
+  }
+
+  function makeMoonTexture() {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    const g = c.getContext('2d');
+    const grd = g.createRadialGradient(64, 64, 8, 64, 64, 64);
+    grd.addColorStop(0.00, 'rgba(255,255,255,1)');
+    grd.addColorStop(0.30, 'rgba(232,240,255,0.95)');
+    grd.addColorStop(0.55, 'rgba(170,195,255,0.28)');
+    grd.addColorStop(1.00, 'rgba(80,110,200,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 128, 128);
     return new THREE.CanvasTexture(c);
   }
 
@@ -368,7 +395,7 @@
     /* sunset sky dome + glowing sun on the horizon */
     const sky = new THREE.Mesh(
       new THREE.SphereGeometry(1500, 24, 16),
-      new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
+      new THREE.MeshBasicMaterial({ map: makeSkyTexture('afternoon'), side: THREE.BackSide, fog: false, depthWrite: false })
     );
     sky.renderOrder = -1000;
     scene.add(sky);
@@ -395,6 +422,8 @@
 
     buildClouds();
     buildRain();
+    buildStarfield();
+    buildMoon();
   }
 
   /* ================================================================
@@ -439,6 +468,181 @@
     scene.add(rainLines);
   }
 
+  function buildStarfield() {
+    const N = 700;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const elev = 0.08 + Math.random() * 0.9;
+      const horiz = Math.cos(elev) * 1300;
+      pos[i * 3] = Math.cos(a) * horiz;
+      pos[i * 3 + 1] = Math.sin(elev) * 1300;
+      pos[i * 3 + 2] = Math.sin(a) * horiz;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    starField = new THREE.Points(geo, new THREE.PointsMaterial({
+      color: 0xffffff, size: 2.6, sizeAttenuation: false,
+      transparent: true, opacity: 0, depthWrite: false, fog: false
+    }));
+    starField.frustumCulled = false;
+    starField.visible = false;
+    scene.add(starField);
+  }
+
+  function buildMoon() {
+    moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: makeMoonTexture(), transparent: true, depthWrite: false, fog: false, color: 0xdfe8ff
+    }));
+    moonSprite.scale.set(95, 95, 1);
+    moonSprite.position.set(-260, 190, 700);
+    moonSprite.visible = false;
+    scene.add(moonSprite);
+  }
+
+  /* ================================================================
+     TIME OF DAY — random morning / afternoon / night lighting with a
+     running in-game clock. The world time zone label is GMT+7.
+     ================================================================ */
+  function makePalette(cfg) {
+    const o = Object.assign({}, cfg);
+    o.fogC = new THREE.Color(cfg.fog);
+    o.skyC = new THREE.Color(cfg.sky);
+    o.keyC = new THREE.Color(cfg.key);
+    o.ambC = new THREE.Color(cfg.amb);
+    o.hemiSkyC = new THREE.Color(cfg.hemiSky);
+    o.hemiGroundC = new THREE.Color(cfg.hemiGround);
+    o.rimC = new THREE.Color(cfg.rim);
+    o.cloudC = new THREE.Color(cfg.cloud);
+    return o;
+  }
+  const TIME_PALETTES = {
+    morning: makePalette({
+      fog: 0xd8e6f0, fogNear: 120, fogFar: 760,
+      sky: 0xffffff,
+      key: 0xfff2d8, keyInt: 1.0,
+      amb: 0xdfe9ff, ambInt: 0.55,
+      hemiSky: 0xbfd8ff, hemiGround: 0x6a5a4a, hemiInt: 0.55,
+      rim: 0x8a7ab8, rimInt: 0.2,
+      sun: 1, moon: 0, stars: 0,
+      cloud: 0xffffff, cloudOp: 0.3,
+      label: 'SÁNG'
+    }),
+    afternoon: makePalette({
+      fog: 0xff9a80, fogNear: 80, fogFar: 620,
+      sky: 0xffffff,
+      key: 0xffb070, keyInt: 0.85,
+      amb: 0xffd0c8, ambInt: 0.42,
+      hemiSky: 0x9a7cff, hemiGround: 0x5a3a2a, hemiInt: 0.45,
+      rim: 0x4a3a8a, rimInt: 0.3,
+      sun: 1, moon: 0, stars: 0,
+      cloud: 0xffffff, cloudOp: 0.22,
+      label: 'CHIỀU'
+    }),
+    night: makePalette({
+      fog: 0x0b1022, fogNear: 30, fogFar: 460,
+      sky: 0x9aa0c8,
+      key: 0x8fa8ff, keyInt: 0.34,
+      amb: 0x7a7ab8, ambInt: 0.26,
+      hemiSky: 0x2a3766, hemiGround: 0x0c0c14, hemiInt: 0.22,
+      rim: 0x5a4a8a, rimInt: 0.12,
+      sun: 0, moon: 1, stars: 1,
+      cloud: 0x3a4160, cloudOp: 0.4,
+      label: 'TỐI'
+    })
+  };
+  const TIME_PHASES = { morning: 'SÁNG', afternoon: 'CHIỀU', night: 'TỐI' };
+  const tod = {
+    fog: new THREE.Color(0xff9a80), fogNear: 80, fogFar: 620,
+    sky: new THREE.Color(0xffffff),
+    key: new THREE.Color(0xffb070), keyInt: 0.85,
+    amb: new THREE.Color(0xffd0c8), ambInt: 0.42,
+    hemiSky: new THREE.Color(0x9a7cff), hemiGround: new THREE.Color(0x5a3a2a), hemiInt: 0.45,
+    rim: new THREE.Color(0x4a3a8a), rimInt: 0.3,
+    sun: 1, moon: 0, stars: 0,
+    cloud: new THREE.Color(0xffffff), cloudOp: 0.22
+  };
+  let gameClockSec = 15 * 3600;      // in-game seconds of day; randomized on start
+  let timePhase = 'afternoon';
+  let timeJumpT = 110;
+  let _skyKind = 'afternoon';
+  const _skyTime = { morning: 0, afternoon: 0, night: 0 };
+
+  function phaseFromHour(h) {
+    return (h >= 5 && h < 12) ? 'morning' : (h >= 12 && h < 18) ? 'afternoon' : 'night';
+  }
+  function setSkyTexture(phase) {
+    if (!skyMesh || _skyKind === phase) return;
+    _skyKind = phase;
+    skyMesh.material.map = makeSkyTexture(phase);
+    skyMesh.material.needsUpdate = true;
+  }
+  function snapTimePalette() {
+    const P = TIME_PALETTES[timePhase];
+    tod.fog.copy(P.fogC); tod.fogNear = P.fogNear; tod.fogFar = P.fogFar;
+    tod.sky.copy(P.skyC);
+    tod.key.copy(P.keyC); tod.keyInt = P.keyInt;
+    tod.amb.copy(P.ambC); tod.ambInt = P.ambInt;
+    tod.hemiSky.copy(P.hemiSkyC); tod.hemiGround.copy(P.hemiGroundC); tod.hemiInt = P.hemiInt;
+    tod.rim.copy(P.rimC); tod.rimInt = P.rimInt;
+    tod.sun = P.sun; tod.moon = P.moon; tod.stars = P.stars;
+    tod.cloud.copy(P.cloudC); tod.cloudOp = P.cloudOp;
+    setSkyTexture(timePhase);
+  }
+  function setGameTime(seconds) {
+    gameClockSec = ((seconds % 86400) + 86400) % 86400;
+    timePhase = phaseFromHour(gameClockSec / 3600);
+    timeJumpT = 100 + Math.random() * 160;
+    setSkyTexture(timePhase);
+    snapTimePalette();
+    if (typeof applyWeather === 'function') applyWeather();
+  }
+  function randomizeGameTime(snap) {
+    const r = Math.random();
+    const phase = r < 0.34 ? 'morning' : r < 0.67 ? 'afternoon' : 'night';
+    let h;
+    if (phase === 'morning') h = 6 + Math.random() * 5;
+    else if (phase === 'afternoon') h = 12 + Math.random() * 5.5;
+    else h = 20 + Math.random() * 8;                 // 20..28 → wraps past midnight
+    gameClockSec = Math.floor(((h % 24) * 3600));
+    timePhase = phaseFromHour(gameClockSec / 3600);
+    timeJumpT = 100 + Math.random() * 160;
+    setSkyTexture(timePhase);
+    if (snap) snapTimePalette();
+    if (typeof applyWeather === 'function') applyWeather();
+  }
+  function updateTimeOfDay(dt) {
+    gameClockSec = (gameClockSec + dt) % 86400;
+    const p = phaseFromHour(gameClockSec / 3600);
+    if (p !== timePhase) { timePhase = p; setSkyTexture(p); }
+    const P = TIME_PALETTES[timePhase];
+    const k = 1 - Math.exp(-dt * 0.55);
+    tod.fog.lerp(P.fogC, k);
+    tod.fogNear += (P.fogNear - tod.fogNear) * k;
+    tod.fogFar += (P.fogFar - tod.fogFar) * k;
+    tod.sky.lerp(P.skyC, k);
+    tod.key.lerp(P.keyC, k);
+    tod.keyInt += (P.keyInt - tod.keyInt) * k;
+    tod.amb.lerp(P.ambC, k);
+    tod.ambInt += (P.ambInt - tod.ambInt) * k;
+    tod.hemiSky.lerp(P.hemiSkyC, k);
+    tod.hemiGround.lerp(P.hemiGroundC, k);
+    tod.hemiInt += (P.hemiInt - tod.hemiInt) * k;
+    tod.rim.lerp(P.rimC, k);
+    tod.rimInt += (P.rimInt - tod.rimInt) * k;
+    tod.sun += (P.sun - tod.sun) * k;
+    tod.moon += (P.moon - tod.moon) * k;
+    tod.stars += (P.stars - tod.stars) * k;
+    tod.cloud.lerp(P.cloudC, k);
+    tod.cloudOp += (P.cloudOp - tod.cloudOp) * k;
+    // random time-of-day jumps keep the world varied
+    timeJumpT -= dt;
+    if (timeJumpT <= 0) {
+      randomizeGameTime(false);
+      toast('GIỜ ĐÃ ĐỔI — ' + TIME_PHASES[timePhase]);
+    }
+  }
+
   const WEATHER_STATES = {
     clear:  { rain: 0,    dark: 0,    hold: [45, 90], label: '☀ NẮNG' },
     cloudy: { rain: 0.04, dark: 0.55, hold: [18, 35], label: '☁ MÂY KÉO VỀ' },
@@ -479,31 +683,57 @@
     setWeatherState(next);
   }
 
-  const _wFogClear = new THREE.Color(0xff9a80);
   const _wFogRain = new THREE.Color(0x55616e);
+  const _wCloudRain = new THREE.Color(0x3a4048);
   const _wTmp = new THREE.Color();
+  // Time-of-day values are the base; weather darkens them on top of it.
   function applyWeather() {
     if (!scene || !scene.fog) return;
     const t = Math.max(weatherDark, weatherRain * 0.6);
-    _wTmp.copy(_wFogClear).lerp(_wFogRain, t);
+    _wTmp.copy(tod.fog).lerp(_wFogRain, t);
     scene.fog.color.copy(_wTmp);
     if (scene.background && scene.background.isColor) scene.background.copy(_wTmp);
-    scene.fog.near = 80 - 46 * t;
-    scene.fog.far = 620 - 330 * t;
-    if (ambientLight) ambientLight.intensity = 0.42 + 0.05 * t;
-    if (hemiLight) hemiLight.intensity = 0.45 - 0.14 * t;
-    if (keyLight) keyLight.intensity = 0.85 - 0.62 * t + lightningFlash * 1.1;
-    if (rimLight) rimLight.intensity = 0.3 - 0.24 * t;
-    if (skyMesh) skyMesh.material.color.setRGB(1 - 0.45 * t, 1 - 0.38 * t, 1 - 0.26 * t);
+    scene.fog.near = tod.fogNear * (1 - 0.45 * t);
+    scene.fog.far = tod.fogFar * (1 - 0.5 * t);
+    if (ambientLight) {
+      ambientLight.color.copy(tod.amb);
+      ambientLight.intensity = tod.ambInt + 0.05 * t;
+    }
+    if (hemiLight) {
+      hemiLight.color.copy(tod.hemiSky);
+      hemiLight.groundColor.copy(tod.hemiGround);
+      hemiLight.intensity = tod.hemiInt * (1 - 0.3 * t);
+    }
+    if (keyLight) {
+      keyLight.color.copy(tod.key);
+      keyLight.intensity = tod.keyInt * (1 - 0.65 * t) + lightningFlash * 1.1;
+    }
+    if (rimLight) {
+      rimLight.color.copy(tod.rim);
+      rimLight.intensity = tod.rimInt * (1 - 0.8 * t);
+    }
+    if (skyMesh) {
+      const dim = 1 - 0.5 * t;
+      skyMesh.material.color.setRGB(tod.sky.r * dim, tod.sky.g * dim, tod.sky.b * dim);
+    }
     if (sunSprite) {
-      const so = Math.max(0, 1 - t * 1.55);
+      const so = Math.max(0, tod.sun * (1 - 1.5 * t));
       sunSprite.material.opacity = so;
       sunSprite.visible = so > 0.02;
     }
+    if (moonSprite) {
+      const mo = Math.max(0, tod.moon * (1 - 1.4 * t));
+      moonSprite.material.opacity = mo;
+      moonSprite.visible = mo > 0.02;
+    }
+    if (starField) {
+      const st = Math.max(0, tod.stars * (1 - 1.2 * t));
+      starField.material.opacity = st;
+      starField.visible = st > 0.03;
+    }
     if (cloudMat) {
-      const c = 1 - 0.55 * t;
-      cloudMat.color.setRGB(c, c, c * 1.02);
-      cloudMat.opacity = 0.22 + 0.66 * t;
+      cloudMat.color.copy(tod.cloud).lerp(_wCloudRain, t);
+      cloudMat.opacity = Math.min(1, tod.cloudOp + 0.55 * t);
     }
   }
 
@@ -578,6 +808,7 @@
       lightningTimer = Math.max(lightningTimer, 4);
     }
     if (lightningFlash > 0) lightningFlash = Math.max(0, lightningFlash - dt * 4.5);
+    updateTimeOfDay(dt);
     applyWeather();
     updateClouds(dt);
     updateRain(dt);
@@ -2650,6 +2881,11 @@
       toast('Thời tiết: ' + WEATHER_STATES[next].label);
       Sfx.click();
     }
+    else if (code === 'KeyG') {
+      randomizeGameTime(false);
+      toast('GIỜ ĐÃ ĐỔI — ' + TIME_PHASES[timePhase]);
+      Sfx.click();
+    }
     else if (code === 'KeyE') { if (player.inCar) exitCar(); else enterCar(); }
   }
 
@@ -3268,6 +3504,7 @@
   const carPrompt = document.getElementById('carPrompt');
   const clockTime = document.getElementById('clockTime');
   const clockZone = document.getElementById('clockZone');
+  const timePhaseEl = document.getElementById('timePhase');
   const weatherLabel = document.getElementById('weatherLabel');
   const lightningEl = document.getElementById('lightning');
   let msgTimer = null, flashT = 0;
@@ -3344,17 +3581,24 @@
     speedBox.classList.remove('hidden');
     if (speedN) speedN.textContent = Math.round(Math.abs(player.inCar.curSpeed) * 7.5);
   }
-  // Live clock in the GMT+7 timezone (Vietnam) — independent of the PC clock zone
+  // Running in-game clock (world time zone GMT+7). The hour is randomized at
+  // the start and occasionally jumps, so the world cycles morning/afternoon/night.
   let _lastClockTxt = '';
   function updateClock() {
     if (clockZone && clockZone.textContent !== 'GMT+7') clockZone.textContent = 'GMT+7';
     if (!clockTime) return;
-    const d = new Date(Date.now() + 7 * 3600 * 1000);
-    const hh = String(d.getUTCHours()).padStart(2, '0');
-    const mm = String(d.getUTCMinutes()).padStart(2, '0');
-    const ss = String(d.getUTCSeconds()).padStart(2, '0');
+    const total = Math.floor(gameClockSec) % 86400;
+    const hh = String(Math.floor(total / 3600)).padStart(2, '0');
+    const mm = String(Math.floor(total / 60) % 60).padStart(2, '0');
+    const ss = String(total % 60).padStart(2, '0');
     const txt = hh + ':' + mm + ':' + ss;
     if (txt !== _lastClockTxt) { _lastClockTxt = txt; clockTime.textContent = txt; }
+  }
+  let _lastPhaseLbl = '';
+  function updateTimeHUD() {
+    if (!timePhaseEl) return;
+    const lbl = TIME_PHASES[timePhase] || '';
+    if (lbl !== _lastPhaseLbl) { _lastPhaseLbl = lbl; timePhaseEl.textContent = lbl; }
   }
   let _lastWeatherLabel = '';
   function updateWeatherHUD() {
@@ -3535,6 +3779,7 @@
     updateCarPrompt();
     updateWeather(dt);
     updateClock();
+    updateTimeHUD();
 
     if (flashT > 0) { flashT -= dt; flashEl.style.opacity = Math.max(0, flashT * 2); }
     updateOcclusion(dt);
@@ -3550,6 +3795,7 @@
     player = createPlayer();
     player.group.position.copy(player.pos);
     player.group.rotation.y = 0;
+    randomizeGameTime(true);            // random SÁNG / CHIỀU / TỐI on every run
     // camera parked behind the hero, looking up the street (+z)
     camYaw = 0; camPitch = -0.17; camDist = CAM_DIST; camInit = false;
     recoilPitch = 0; recoilYaw = 0;
@@ -3609,6 +3855,26 @@
     },
     setWeather,
     strikeLightning: triggerLightning,
+    setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },
+    setTimeOfDay(phase) {
+      const h = phase === 'morning' ? 8 : phase === 'afternoon' ? 15 : 22;
+      setGameTime(h * 3600);
+      updateClock(); updateTimeHUD();
+    },
+    randomizeTime() { randomizeGameTime(false); updateClock(); updateTimeHUD(); },
+    get timeInfo() {
+      return {
+        hour: gameClockSec / 3600,
+        phase: timePhase,
+        label: TIME_PHASES[timePhase] || '',
+        clock: clockTime ? clockTime.textContent : '',
+        sun: sunSprite ? sunSprite.material.opacity : 0,
+        moon: moonSprite ? moonSprite.material.opacity : 0,
+        stars: starField ? starField.material.opacity : 0,
+        fogColor: scene && scene.fog ? scene.fog.color.getHex() : 0,
+        fogFar: scene && scene.fog ? scene.fog.far : 0
+      };
+    },
     get weather() {
       return {
         state: weatherState,

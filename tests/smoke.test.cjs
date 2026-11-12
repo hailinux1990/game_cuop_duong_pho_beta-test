@@ -616,7 +616,8 @@ handlers.mouseup({ button: 0 });
 check('bullets are blocked by the tower (car behind it untouched)', (wallCar.shot || 0) === wallShotsBefore);
 
 /* ================= TEST 19: Vice City sunset art direction ===================== */
-G.setWeather('clear');       // art-direction checks assume the sunset baseline
+G.setTimeOfDay('afternoon'); // art-direction checks assume the sunset baseline
+G.setWeather('clear');
 step(2);
 let skyDomes = 0, sunSprites = 0, oceanPlane = null, palmTrunks = 0, neonMeshes = 0, opaqueFaded = 0;
 const NEON_HEX = [0xff3fa4, 0x3fe0ff, 0xb45cff, 0xffd23f, 0xff6a3f, 0x64ff9a];
@@ -744,6 +745,7 @@ check('stolen car stays parked where the hero left it', entryCar.pos.distanceTo(
 
 
 /* ================= TEST 25: weather + GMT+7 running clock ====================== */
+G.setTimeOfDay('afternoon');   // deterministic sunset baseline for the weather checks
 G.setWeather('clear');
 step(2);
 let wx = G.weather;
@@ -775,12 +777,7 @@ check('clearing weather brings the sunset back', wx.rain < 0.05 && wx.fogColor =
 
 const cm = /^(\d{2}):(\d{2}):(\d{2})$/.exec(els.clockTime.textContent);
 check('clock displays HH:MM:SS ("' + els.clockTime.textContent + '")', !!cm);
-if (cm) {
-  const d = new Date(Date.now() + 7 * 3600 * 1000);
-  const expected = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
-  const shown = (+cm[1]) * 3600 + (+cm[2]) * 60 + (+cm[3]);
-  check('clock runs on Vietnam GMT+7 time', Math.abs(shown - expected) <= 3);
-}
+check('clock phase label exists', ['SÁNG', 'CHIỀU', 'TỐI'].indexOf(els.timePhase.textContent) >= 0);
 check('clock labels the GMT+7 zone', els.clockZone.textContent === 'GMT+7');
 
 key('KeyT'); step(1);
@@ -839,6 +836,47 @@ check('aim reticle icon removed from the HUD', hudHtml.indexOf('id="crosshair"')
 let skirtCount = 0;
 G.NPCs.forEach(n => { if (n.group.userData.skirt) skirtCount++; });
 check('female pedestrians wear skirts (' + skirtCount + ')', skirtCount >= 1);
+
+
+/* ================= TEST 27: random morning / afternoon / night ================= */
+G.setWeather('clear');
+step(2);
+G.setTimeOfDay('morning');
+step(2);
+let ti = G.timeInfo;
+check('morning phase is SÁNG', ti.phase === 'morning' && ti.label === 'SÁNG');
+check('morning sun is up', ti.sun > 0.5);
+check('morning stars are hidden', ti.stars < 0.2);
+check('morning fog is bright (0x' + ti.fogColor.toString(16) + ')', ti.fogColor !== 0x0b1022 && ti.fogFar > 500);
+check('clock shows SÁNG', els.timePhase.textContent === 'SÁNG');
+
+G.setTimeOfDay('afternoon');
+step(2);
+ti = G.timeInfo;
+check('afternoon phase is CHIỀU', ti.phase === 'afternoon' && ti.label === 'CHIỀU');
+check('afternoon keeps the sunset fog', ti.fogColor === 0xff9a80);
+check('clock shows CHIỀU', els.timePhase.textContent === 'CHIỀU');
+
+G.setTimeOfDay('night');
+step(2);
+ti = G.timeInfo;
+check('night phase is TỐI', ti.phase === 'night' && ti.label === 'TỐI');
+check('night hides the sun', ti.sun < 0.1);
+check('night shows the moon', ti.moon > 0.5);
+check('night shows the stars', ti.stars > 0.5);
+check('night fog is dark (0x' + ti.fogColor.toString(16) + ')', ti.fogColor === 0x0b1022);
+check('clock shows TỐI', els.timePhase.textContent === 'TỐI');
+
+G.setGameHour(15);
+step(2);
+const clockA = els.clockTime.textContent;
+step(75);
+check('in-game clock keeps running', els.clockTime.textContent !== clockA);
+check('clock sits inside the afternoon hour', G.timeInfo.hour >= 15 && G.timeInfo.hour < 16);
+check('clock still labels GMT+7', els.clockZone.textContent === 'GMT+7');
+
+key('KeyG'); step(1);
+check('G randomizes the time of day', ['SÁNG', 'CHIỀU', 'TỐI'].indexOf(els.timePhase.textContent) >= 0);
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);
