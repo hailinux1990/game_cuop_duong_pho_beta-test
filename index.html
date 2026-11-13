@@ -26,6 +26,8 @@
   #healthBox .label { font-size:12px; letter-spacing:2px; margin-bottom:3px; color:var(--ui2); }
   #healthBar { width:190px; height:16px; border:2px solid #000; background:#3a0f24; box-shadow:0 0 0 2px #fff; }
   #healthFill { height:100%; width:100%; background:linear-gradient(#7df, #2ac); transition:width .15s; }
+  #armorBar { width:190px; height:10px; border:2px solid #000; background:#0d1430; box-shadow:0 0 0 2px #fff; margin-top:2px; }
+  #armorFill { height:100%; width:0%; background:linear-gradient(#9cf, #46f); transition:width .15s; }
   #wantedBox { margin-top:8px; display:flex; gap:3px; }
   .star { width:18px; height:18px; color:#333; font-size:20px; line-height:18px; text-align:center; text-shadow:none; }
   .star.on { color:#ffd25e; text-shadow:0 0 8px #ff8a3c; }
@@ -117,6 +119,8 @@
   <div id="healthBox" class="hud">
     <div class="label">HEALTH</div>
     <div id="healthBar"><div id="healthFill"></div></div>
+    <div class="label" style="margin-top:6px">ARMOR</div>
+    <div id="armorBar"><div id="armorFill"></div></div>
     <div id="wantedBox"></div>
   </div>
 
@@ -210,7 +214,8 @@
           <div><b>CLICK TRÁI</b> bắn/đánh · <b>GIỮ CHUỘT PHẢI</b> ngắm</div>
           <div><b>E</b> lên/xuống xe · <b>C</b> camera sau lưng</div>
           <div><b>1·2·3·4</b> vũ khí · <b>R</b> nạp đạn</div>
-          <div><b>T</b> đổi thời tiết · <b>G</b> đổi giờ ngẫu nhiên</div>
+          <div><b>T</b> đổi thời tiết · <b>G</b> đổi giờ ngẫu nhiên · <b>M</b> menu</div>
+          <div><b>CHEAT</b> gõ chữ: health · armor · reload</div>
         </div>
       </div>
       <div class="tabBody hidden" id="tabAud">

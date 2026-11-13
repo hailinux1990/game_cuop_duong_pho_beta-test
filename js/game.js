@@ -1154,10 +1154,26 @@
     return false;
   }
   function clampToWorld(v) {
-    const L = CENTER + 6;
+    const L = GROUND_HALF + SEA_BAND;       // island + the shallow swimming band
     v.x = Math.max(-L, Math.min(L, v.x));
     v.z = Math.max(-L, Math.min(L, v.z));
     return v;
+  }
+
+  /* ---- water: river + a shallow sea band along the beaches ---- */
+  const SEA_BAND = 24;
+  const RIVER_LEVEL = 0.36;
+  const SEA_LEVEL = -0.04;
+  function swimWaterAt(x, z) {
+    if (isInsideWater(x, z)) return { level: RIVER_LEVEL, river: true };
+    const ax = Math.abs(x), az = Math.abs(z);
+    if (ax > GROUND_HALF && ax <= GROUND_HALF + SEA_BAND && az <= GROUND_HALF + 0.5) {
+      return { level: SEA_LEVEL, river: false };
+    }
+    if (az > GROUND_HALF && az <= GROUND_HALF + SEA_BAND && ax <= GROUND_HALF + 0.5) {
+      return { level: SEA_LEVEL, river: false };
+    }
+    return null;
   }
 
   /* ---- bridge height for rendering: characters/cars glide up the ramps ---- */
@@ -1546,9 +1562,9 @@
 
     return {
       group: g, pos: SPAWN.clone(), prevPos: SPAWN.clone(), vel: new THREE.Vector3(),
-      hp: 100, maxHp: 100, weapon: 0,
+      hp: 100, maxHp: 100, armor: 0, maxArmor: 100, weapon: 0,
       ammoStore: { 2: MAG_SIZE, 3: AK_MAG },   // per-weapon reserve
-      shotsFired: 0,
+      shotsFired: 0, swimming: false, swimLevel: 0,
       wanted: 0, crimeTimer: 0, speed: 6.4, sprint: 1.65,
       inCar: null, muzzle,
       facing: 0, anim: 0, idleT: 0, meleeT: 0, meleeTotal: 0.32,
@@ -1758,6 +1774,161 @@
     }
   }
 
+  /* ---------------- Sharks in the river & bay ---------------- */
+  const sharks = [];
+  function makeSharkModel() {
+    const g = new THREE.Group();
+    const gray = mat(0x5c6874), dark = mat(0x39434d), belly = mat(0x9aa6b0);
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 8, 6), gray);
+    body.scale.set(0.85, 0.65, 2.2);
+    const bellyM = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), belly);
+    bellyM.scale.set(0.7, 0.45, 1.9); bellyM.position.y = -0.12;
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.45, 1.1, 6), gray);
+    nose.rotation.x = Math.PI / 2; nose.position.z = 1.55;
+    const dorsal = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.85, 0.75), dark);
+    dorsal.position.set(0, 0.55, -0.15); dorsal.rotation.x = -0.35;
+    const finL = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.07, 0.5), dark);
+    finL.position.set(-0.62, -0.05, 0.25); finL.rotation.z = 0.3;
+    const finR = finL.clone(); finR.position.x = 0.62; finR.rotation.z = -0.3;
+    const tail = new THREE.Group(); tail.position.z = -2.0;
+    const tailFin = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.95, 0.7), dark);
+    tailFin.position.z = -0.25; tail.add(tailFin);
+    g.add(body, bellyM, nose, dorsal, finL, finR, tail);
+    g.userData.tail = tail;
+    return g;
+  }
+  function spawnSharkAt(x, z, kind) {
+    const w = swimWaterAt(x, z);
+    const level = w ? w.level : RIVER_LEVEL;
+    const g = makeSharkModel();
+    const s = {
+      group: g, pos: new THREE.Vector3(x, 0, z), level, kind,
+      angle: rng() * Math.PI * 2, speed: 2.2, anim: rng() * 10,
+      biteCd: 0, patrolT: 0.5 + Math.random() * 2, target: null
+    };
+    g.position.set(x, level + 0.06, z);
+    g.rotation.y = s.angle;
+    scene.add(g);
+    sharks.push(s);
+    return s;
+  }
+  function updateShark(s, dt) {
+    // target: the swimming hero, or any swimmer NPC in the water
+    let best = 26 * 26, target = null;
+    if (player && player.swimming && !player.dead) {
+      const d = s.pos.distanceToSquared(player.pos);
+      if (d < best) { best = d; target = { kind: 'player', pos: player.pos }; }
+    }
+    for (let i = 0; i < NPCs.length; i++) {
+      const n = NPCs[i];
+      if (!n.swim || n.dead || !swimWaterAt(n.pos.x, n.pos.z)) continue;
+      const d = s.pos.distanceToSquared(n.pos);
+      if (d < best) { best = d; target = { kind: 'npc', npc: n, pos: n.pos }; }
+    }
+    s.target = target;
+    let desiredAngle = s.angle, speed = 2.2;
+    if (target) {
+      desiredAngle = Math.atan2(target.pos.x - s.pos.x, target.pos.z - s.pos.z);
+      speed = 4.5;
+    } else {
+      s.patrolT -= dt;
+      if (s.patrolT <= 0) {
+        s.patrolT = 2 + Math.random() * 4;
+        s.angle += (Math.random() - 0.5) * 1.8;
+      }
+    }
+    let dh = desiredAngle - s.angle;
+    while (dh > Math.PI) dh -= Math.PI * 2;
+    while (dh < -Math.PI) dh += Math.PI * 2;
+    const maxTurn = 3.0 * dt;
+    s.angle += Math.max(-maxTurn, Math.min(maxTurn, dh));
+    const nx = s.pos.x + Math.sin(s.angle) * speed * dt;
+    const nz = s.pos.z + Math.cos(s.angle) * speed * dt;
+    const nw = swimWaterAt(nx, nz);
+    if (nw) {
+      s.pos.x = nx; s.pos.z = nz; s.level = nw.level;
+    } else {
+      s.angle += Math.PI * (0.6 + Math.random() * 0.4);   // bounce at the shore
+      s.patrolT = 0;
+    }
+    s.biteCd = Math.max(0, s.biteCd - dt);
+    if (target && s.pos.distanceTo(target.pos) < 1.9 && s.biteCd <= 0) {
+      s.biteCd = 1.25;
+      if (target.kind === 'player') {
+        playerTakeDamage(16, s.pos);
+        spawnBlood(player.pos.clone().setY(0.5), new THREE.Vector3(Math.sin(s.angle), 0, Math.cos(s.angle)), 8);
+        toast('CÁ MẬP TẤN CÔNG!');
+        Sfx.blood();
+      } else {
+        damageNPC(target.npc, 60, target.npc.pos.clone().setY(0.4),
+          new THREE.Vector3(Math.sin(s.angle), 0, Math.cos(s.angle)));
+        spawnBlood(target.npc.pos.clone().setY(0.4), new THREE.Vector3(Math.sin(s.angle), 0, Math.cos(s.angle)), 12);
+      }
+    }
+    s.anim += dt * (target ? 8 : 5);
+    s.group.position.set(s.pos.x, s.level + 0.06 + Math.sin(s.anim * 0.8) * 0.03, s.pos.z);
+    s.group.rotation.y = s.angle;
+    if (s.group.userData.tail) s.group.userData.tail.rotation.y = Math.sin(s.anim) * 0.5;
+  }
+  function randomWaterPoint(pos, r) {
+    for (let t = 0; t < 24; t++) {
+      const a = rng() * Math.PI * 2, d = 1 + rng() * r;
+      const x = pos.x + Math.cos(a) * d, z = pos.z + Math.sin(a) * d;
+      if (swimWaterAt(x, z)) return new THREE.Vector3(x, 0, z);
+    }
+    return pos.clone();
+  }
+  function updateSwimmer(npc, dt) {
+    const water = swimWaterAt(npc.pos.x, npc.pos.z);
+    if (!water) {                         // shoved onto land (e.g. tests): stand still
+      npc.group.position.set(npc.pos.x, 0, npc.pos.z);
+      npc.group.rotation.set(0, npc.facing, 0);
+      return;
+    }
+    // flee from a nearby shark, otherwise paddle around
+    let threat = null, td = 12 * 12;
+    for (let i = 0; i < sharks.length; i++) {
+      const d = sharks[i].pos.distanceToSquared(npc.pos);
+      if (d < td) { td = d; threat = sharks[i]; }
+    }
+    let mx = 0, mz = 0, moving = false, speed = 1.9;
+    if (threat) {
+      const dir = new THREE.Vector3(npc.pos.x - threat.pos.x, 0, npc.pos.z - threat.pos.z);
+      if (dir.lengthSq() > 0.001) dir.normalize();
+      mx = dir.x; mz = dir.z; moving = true; speed = 3.6;
+    } else {
+      npc.wanderTimer = (npc.wanderTimer || 0) - dt;
+      if (!npc.target || npc.wanderTimer <= 0 || npc.pos.distanceTo(npc.target) < 1) {
+        npc.target = randomWaterPoint(npc.pos, 9);
+        npc.wanderTimer = 2 + rng() * 5;
+      }
+      const dir = npc.target.clone().sub(npc.pos).setY(0);
+      if (dir.lengthSq() > 0.01) { dir.normalize(); mx = dir.x; mz = dir.z; moving = true; }
+    }
+    if (moving) {
+      const nx = npc.pos.x + mx * speed * dt;
+      const nz = npc.pos.z + mz * speed * dt;
+      if (swimWaterAt(nx, nz)) { npc.pos.x = nx; npc.pos.z = nz; }
+      else { npc.target = null; }
+      npc.facing = Math.atan2(mx, mz);
+      npc.anim += dt * (speed * 1.6);
+      clampToWorld(npc.pos);
+    }
+    const w = swimWaterAt(npc.pos.x, npc.pos.z) || water;
+    npc.group.position.set(
+      npc.pos.x,
+      w.level - 1.05 + Math.sin(npc.anim * 1.2) * 0.05,
+      npc.pos.z
+    );
+    npc.group.rotation.set(0, npc.facing, 0);
+    const a = npc.anim;
+    npc.group.userData.legL.rotation.x = moving ? Math.sin(a) * 0.35 : 0;
+    npc.group.userData.legR.rotation.x = moving ? -Math.sin(a) * 0.35 : 0;
+    npc.group.userData.armR.rotation.x = -1.0 + Math.sin(a) * 0.5;
+    npc.group.userData.armL.rotation.x = -1.0 - Math.sin(a) * 0.5;
+    npc.group.userData.armL.rotation.z = 0;
+  }
+
   function spawnWorld() {
     if (spawned) return;
     buildRoutes();
@@ -1780,6 +1951,44 @@
       const x = -CENTER + 10 + k * ((CENTER * 2 - 20) / 10);
       makeBoat(k % 2 === 0 ? 1 : -1, x);
     }
+
+    // people swimming in the river and along the beaches
+    for (let i = 0; i < 8; i++) {
+      const n = makeNPC('civilian');
+      n.swim = true;
+      n.state = 'swim';
+      n.speed = 1.9;
+      n.target = null;
+      n.wanderTimer = 0;
+      let p = null;
+      for (let t = 0; t < 60 && !p; t++) {
+        let x, z;
+        if (i < 3) {
+          x = -CENTER + 20 + rng() * (CITY - 40);
+          z = RIVER_Z + (rng() * 2 - 1) * (RIVER_HALF - 3);
+        } else {
+          const side = (i - 3) % 4;
+          const spread = (rng() * 2 - 1) * CENTER;
+          if (side === 0) { x = spread; z = -(GROUND_HALF + 6 + rng() * 14); }
+          else if (side === 1) { x = spread; z = GROUND_HALF + 6 + rng() * 14; }
+          else if (side === 2) { x = GROUND_HALF + 6 + rng() * 14; z = spread; }
+          else { x = -GROUND_HALF - 6 - rng() * 14; z = spread; }
+        }
+        if (swimWaterAt(x, z)) p = new THREE.Vector3(x, 0, z);
+      }
+      if (p) { n.pos.copy(p); n.group.position.copy(p); }
+    }
+
+    // sharks: river monsters near the bridges + offshore patrols
+    const riverSharkX = [cx(2), cx(5), cx(9)];
+    for (let i = 0; i < 3; i++) {
+      const x = riverSharkX[i] + (rng() * 2 - 1) * 8;
+      const z = RIVER_Z + (rng() * 2 - 1) * 6;
+      spawnSharkAt(x, z, 'river');
+    }
+    spawnSharkAt((rng() * 2 - 1) * CENTER, -(GROUND_HALF + 12), 'sea');
+    spawnSharkAt((rng() * 2 - 1) * CENTER, GROUND_HALF + 12, 'sea');
+    spawnSharkAt(GROUND_HALF + 12, (rng() * 2 - 1) * CENTER, 'sea');
 
     spawned = true;
   }
@@ -2011,6 +2220,11 @@
 
   function playerTakeDamage(dmg, from) {
     if (player.dead) return;
+    if (player.armor > 0) {                       // armor soaks damage before HP
+      const absorbed = Math.min(player.armor, dmg);
+      player.armor -= absorbed;
+      dmg -= absorbed;
+    }
     player.hp -= dmg;
     flash();
     spawnBlood(player.pos.clone().setY(1.1), from ? player.pos.clone().sub(from).normalize() : new THREE.Vector3(1, 0, 0), 6);
@@ -2125,7 +2339,7 @@
   }
 
   function fireGun() {
-    if (!player || player.dead || !canFire()) return;
+    if (!player || player.dead || player.swimming || !canFire()) return;
     const w = WEAPONS[player.weapon];
     if (!w || w.kind !== 'gun') return;
     if (player.shotCd > 0) return;
@@ -2143,7 +2357,14 @@
     addCameraRecoil(w);
     Sfx[w.snd]();
     const a = aimInfo();
-    player.group.localToWorld(_muzzleW.copy(player.muzzle.position));
+    if (player.inCar) {
+      const c = player.inCar;
+      const fx = Math.sin(c.heading), fz = Math.cos(c.heading);
+      const rx = -Math.cos(c.heading), rz = Math.sin(c.heading);   // driver-side window (screen-right)
+      _muzzleW.set(c.pos.x + rx * 0.55 + fx * 0.95, 1.35, c.pos.z + rz * 0.55 + fz * 0.95);
+    } else {
+      player.group.localToWorld(_muzzleW.copy(player.muzzle.position));
+    }
     spawnMuzzle(_muzzleW);
     ejectShell(_muzzleW, a.dir);
     pulseAmmo();
@@ -2178,7 +2399,11 @@
     _ray.far = w.range;                       // bullets fly much farther now
     _shotTargets.length = 0;
     for (let i = 0; i < buildingMeshes.length; i++) _shotTargets.push(buildingMeshes[i]);
-    for (let i = 0; i < hittables.length; i++) _shotTargets.push(hittables[i]);
+    for (let i = 0; i < hittables.length; i++) {
+      const h = hittables[i];
+      if (player.inCar && h.userData.owner === player.inCar) continue;   // no self-hits from the car
+      _shotTargets.push(h);
+    }
     const hits = _ray.intersectObjects(_shotTargets, false);
     let hitOwner = null, hitPoint = null, hitHead = false, hitBuilding = false;
     if (hits.length) {
@@ -2367,6 +2592,8 @@
         npc.group.userData.parts.forEach(p => { if (p.material && p.material.emissive) p.material.emissive.setHex(0x000000); });
       }
     }
+
+    if (npc.swim) { updateSwimmer(npc, dt); return; }
 
     let moveDir = new THREE.Vector3();
     let moving = false;
@@ -2892,7 +3119,46 @@
   let sensScale = 1;       // [ / ] adjust mouse sensitivity
   let invertY = false;     // Y toggles vertical look inversion
 
-  function onKey(e, down) { keys[e.code] = down; if (down) handleKeyPress(e.code); }
+  const cheatBuf = [];
+  function applyCheat(which) {
+    if (!player || player.dead) return;
+    if (which === 'health') {
+      player.hp = player.maxHp;
+      updateHealthHUD();
+      toast('CHEAT — MÁU ĐẦY ❤');
+    } else if (which === 'armor') {
+      player.armor = player.maxArmor;
+      updateHealthHUD();
+      toast('CHEAT — GIÁP ĐẦY 🛡');
+    } else if (which === 'reload') {
+      player.ammoStore[2] = MAG_SIZE;
+      player.ammoStore[3] = AK_MAG;
+      player.reloadT = 0;
+      updateAmmoHUD(); updateReloadHUD(); updateShotsHUD();
+      toast('CHEAT — FULL ĐẠN MỌI VŨ KHÍ 🔫');
+    }
+    Sfx.warn();
+  }
+  function cheatType(key) {
+    if (!player || player.dead || paused) return;
+    if (typeof key !== 'string' || key.length !== 1) return;
+    const ch = key.toLowerCase();
+    if (ch < 'a' || ch > 'z') return;
+    cheatBuf.push(ch);
+    if (cheatBuf.length > 24) cheatBuf.shift();
+    const buf = cheatBuf.join('');
+    if (buf.endsWith('health')) { cheatBuf.length = 0; applyCheat('health'); }
+    else if (buf.endsWith('armor')) { cheatBuf.length = 0; applyCheat('armor'); }
+    else if (buf.endsWith('reload')) { cheatBuf.length = 0; applyCheat('reload'); }
+  }
+
+  function onKey(e, down) {
+    keys[e.code] = down;
+    if (down) {
+      handleKeyPress(e.code);
+      if (e.key !== undefined) cheatType(e.key);
+    }
+  }
   function handleKeyPress(code) {
     if (!player || player.dead) return;
     if (code === 'Digit1' || code === 'Numpad1') setPlayerWeapon(0);
@@ -3160,9 +3426,13 @@
     }
 
     if (player.inCar) {
-      player.isMoving = false;
-      updateTargetHint(dt);
+      player.swimming = false;
+      player.isMoving = Math.abs(player.inCar.curSpeed) > 1.5;
       driveCar(dt);
+      const wc = WEAPONS[player.weapon];
+      if (wc && wc.kind === 'gun' && (wc.auto ? mouse.down : mouse.pressed)) fireGun();
+      mouse.pressed = false;
+      updateTargetHint(dt);
       return;
     }
 
@@ -3179,13 +3449,23 @@
     const wz = sy * ix + cy * iz;
 
     const sprinting = mi.sprint && moving;
-    const maxSpd = player.speed * (sprinting ? player.sprint : 1) * (aimHeld ? 0.65 : 1);
+    const water = swimWaterAt(player.pos.x, player.pos.z);
+    const wasSwimming = player.swimming;
+    player.swimming = !!water;
+    player.swimLevel = water ? water.level : 0;
+    if (player.swimming && !wasSwimming) {
+      toast('ĐANG BƠI… cẩn thận CÁ MẬP!');
+      Sfx.blood();
+    }
+    const maxSpd = player.swimming
+      ? (sprinting ? 4.3 : 3.0)
+      : player.speed * (sprinting ? player.sprint : 1) * (aimHeld ? 0.65 : 1);
     // Weighty locomotion: ease toward the target velocity and brake smoothly
     // instead of snapping to full speed the instant a key goes down.
     const tvx = moving ? wx * maxSpd : 0;
     const tvz = moving ? wz * maxSpd : 0;
     const vel = player.vel;
-    const accel = moving ? (sprinting ? 26 : 40) : 46;
+    const accel = player.swimming ? 16 : moving ? (sprinting ? 26 : 40) : 46;
     const dvx = tvx - vel.x, dvz = tvz - vel.z;
     const dv = Math.hypot(dvx, dvz);
     const maxDv = accel * dt;
@@ -3216,6 +3496,28 @@
     if (!aimingNow && speed > 0.4) targetFacing = Math.atan2(vel.x, vel.z);
     player.facing = angLerp(player.facing, targetFacing, Math.min(1, dt * 14));
     player.group.rotation.y = player.facing;
+
+    if (player.swimming) {
+      // swim: torso half-submerged, arms paddling, legs kicking, no shooting
+      player.group.rotation.x = 0;
+      player.anim = (player.anim || 0) + dt * (0.6 + speed * 1.1);
+      const a = player.anim;
+      player.group.position.set(
+        player.pos.x,
+        water.level - 1.05 + Math.sin(a * 1.3) * 0.05,
+        player.pos.z
+      );
+      const legSwing = Math.sin(a) * 0.35;
+      player.group.userData.legL.rotation.x = moving ? legSwing : 0;
+      player.group.userData.legR.rotation.x = moving ? -legSwing : 0;
+      player.group.userData.armR.rotation.x = -1.0 + Math.sin(a) * 0.5;
+      player.group.userData.armL.rotation.x = -1.0 - Math.sin(a) * 0.5;
+      player.group.userData.armL.rotation.z = 0;
+      player.isMoving = moving;
+      mouse.pressed = false;
+      updateTargetHint(dt);
+      return;
+    }
 
     // lean slightly into a sprint
     player.group.rotation.x = sprinting && speed > 2 ? 0.07 : 0;
@@ -3525,6 +3827,7 @@
 
   /* ---------------- HUD ---------------- */
   const healthFill = document.getElementById('healthFill');
+  const armorFill = document.getElementById('armorFill');
   const wantedBox = document.getElementById('wantedBox');
   const ammoN = document.getElementById('ammoN');
   const shotsEl = document.getElementById('shotsN');
@@ -3548,7 +3851,10 @@
     wantedBox.innerHTML = '';
     for (let i = 0; i < 5; i++) { const s = document.createElement('span'); s.className = 'star'; s.textContent = '★'; wantedBox.appendChild(s); }
   }
-  function updateHealthHUD() { healthFill.style.width = Math.max(0, player.hp) + '%'; }
+  function updateHealthHUD() {
+    healthFill.style.width = Math.max(0, player.hp) + '%';
+    if (armorFill) armorFill.style.width = Math.max(0, Math.min(100, player.armor)) + '%';
+  }
   function updateWantedHUD() {
     const stars = wantedBox.children;
     const w = Math.round(player.wanted);
@@ -3682,6 +3988,8 @@
     if (player.inCar) { player.inCar.driver = null; player.inCar = null; }
     player.pos.copy(SPAWN); player.group.position.copy(player.pos);
     player.vel.set(0, 0, 0);
+    player.armor = 0;
+    player.swimming = false;
     player.isMoving = false;
     player.stepT = 0;
     player.facing = 0; player.group.rotation.set(0, 0, 0);
@@ -3728,6 +4036,7 @@
     const dot = (x, z, c, r) => { mctx.fillStyle = c; mctx.fillRect(W2(x) - r / 2, W2(z) - r / 2, r, r); };
     cars.forEach(c => { if (!c.dead) dot(c.group.position.x, c.group.position.z, c.isPolice ? '#6af' : '#fc3', 3); });
     boats.forEach(b => dot(b.pos.x, b.pos.z, '#7ef', 3));
+    sharks.forEach(sh => dot(sh.pos.x, sh.pos.z, '#ff4a4a', 3));
     NPCs.forEach(n => { if (!n.dead) dot(n.pos.x, n.pos.z, n.type === 'police' ? '#35f' : '#5c5', 2); });
     if (player) {
       // the hero is a little arrow pointing where he faces
@@ -3782,6 +4091,7 @@
       NPCs.forEach(n => updateNPC(n, FIXED_STEP));
       cars.forEach(c => updateCar(c, FIXED_STEP));
       boats.forEach(b => updateBoat(b, FIXED_STEP));
+      sharks.forEach(sh => updateShark(sh, FIXED_STEP));
       updateEscalation(FIXED_STEP);
       simAcc -= FIXED_STEP;
       steps++;
@@ -3811,7 +4121,7 @@
 
     // walking characters follow the bridge decks / ramps too
     NPCs.forEach(n => {
-      if (!n.dead) n.group.position.y = groundY(n.pos.x, n.pos.z);
+      if (!n.dead && !n.swim) n.group.position.y = groundY(n.pos.x, n.pos.z);
     });
 
     updateFX(dt);
@@ -4039,6 +4349,9 @@
     get paused() { return paused; },
     openPause,
     resumeGame,
+    sharks, swimWaterAt,
+    hurtPlayer(dmg) { playerTakeDamage(dmg); },
+    applyCheat,
     setWeather,
     strikeLightning: triggerLightning,
     setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },

@@ -95,6 +95,9 @@ function step(frames) {
 }
 function key(c) { handlers.keydown({ code: c, preventDefault() {} }); }
 function keyup(c) { handlers.keyup({ code: c }); }
+function typeString(str) {
+  for (const ch of str) handlers.keydown({ key: ch, code: '', preventDefault() {} });
+}
 // point the centre crosshair at a ground z coordinate by scanning camera pitch
 function aimCameraAtGround(zTarget) {
   let bestP = -0.17, bestErr = Infinity;
@@ -128,7 +131,7 @@ check('water detection works', G.isInsideWater(0, G.RIVER_Z) && !G.isInsideWater
 check('player spawns on open ground (no building/water)',
   !G.isInsideBuilding(player.pos.x, player.pos.z) && !G.isInsideWater(player.pos.x, player.pos.z));
 check('world spawned: NPCs=' + G.NPCs.length + ' cars=' + G.cars.length,
-  G.NPCs.length === 104 && G.cars.length === 34);
+  G.NPCs.length === 112 && G.cars.length === 34);
 check('every AI car has a visible driver mesh', G.cars.every(c => c.driverMesh !== null));
 
 /* ================= TEST 1: AK-47 with 500 rounds ================= */
@@ -917,6 +920,100 @@ G.setSetting('quality', 'medium');
 G.setSetting('showFps', false);
 G.setSetting('fxWeather', true);
 check('settings can be restored to defaults', G.settings.fov === 62 && G.settings.quality === 'medium');
+
+
+/* ================= TEST 29: drive-by, swimming, sharks, cheats ================= */
+G.setTimeOfDay('afternoon');
+G.setWeather('clear');
+step(2);
+G.respawn();
+player.hp = 100; player.armor = 0; player.wanted = 0;
+
+check('the crowd includes swimmers (' + G.NPCs.filter(n => n.swim).length + ')',
+  G.NPCs.filter(n => n.swim).length >= 4);
+check('sharks patrol river and bay (' + G.sharks.length + ' sharks)', G.sharks.length >= 4);
+check('sharks spawn in water', G.sharks.every(sh => !!G.swimWaterAt(sh.pos.x, sh.pos.z)));
+
+const riverPt = new THREE.Vector3(-70, 0, G.RIVER_Z);
+check('river/sea water detection works', !!G.swimWaterAt(riverPt.x, riverPt.z) && !G.swimWaterAt(0, 99999));
+
+// hero swims in the river: half-submerged, can paddle around
+G.respawn();
+player.pos.copy(riverPt);
+player.group.position.copy(riverPt);
+step(2);
+check('hero can enter the water and swim', player.swimming === true);
+check('hero is half-submerged while swimming', player.group.position.y < 0.2);
+const swimX0 = player.pos.x, swimZ0 = player.pos.z;
+key('KeyW'); step(24); keyup('KeyW');
+check('hero paddles around while swimming', Math.hypot(player.pos.x - swimX0, player.pos.z - swimZ0) > 0.2);
+
+// a shark in the river bites the swimming hero
+G.respawn();
+player.armor = 0;
+player.pos.copy(riverPt); player.group.position.copy(riverPt);
+const biteShark = G.sharks[1] || G.sharks[0];
+biteShark.pos.set(riverPt.x + 1.0, 0, riverPt.z);
+biteShark.level = G.swimWaterAt(biteShark.pos.x, biteShark.pos.z).level;
+biteShark.biteCd = 0;
+const hpBeforeBite = player.hp;
+step(10);
+check('sharks bite the swimming hero (' + hpBeforeBite + ' -> ' + Math.round(player.hp) + ' hp)', player.hp < hpBeforeBite);
+
+// sharks bite people swimming in the water too
+G.respawn();
+const swimVictim = G.NPCs.find(n => !n.dead && n.type === 'civilian') || G.NPCs.find(n => !n.dead);
+swimVictim.swim = true;
+swimVictim.pos.copy(riverPt); swimVictim.group.position.copy(riverPt);
+const biteShark2 = G.sharks[0];
+biteShark2.pos.set(riverPt.x + 0.8, 0, riverPt.z);
+biteShark2.level = G.swimWaterAt(biteShark2.pos.x, biteShark2.pos.z).level;
+biteShark2.biteCd = 0;
+const swimVictimHp = swimVictim.hp;
+step(10);
+check('sharks can attack people in the water', swimVictim.dead || swimVictim.hp < swimVictimHp);
+
+// drive-by shooting: fire the gun from inside a car without hitting the car
+G.respawn();
+let dcar = G.cars.find(c => !c.dead);
+if (!dcar) dcar = G.spawnCruiser();
+G.cars.forEach(c => {
+  if (c === dcar || c.dead) return;
+  c.pos.set(420, 0, 420); c.prevPos.copy(c.pos); c.group.position.copy(c.pos); c.curSpeed = 0;
+});
+dcar.dead = false; dcar.stolen = true; dcar.driver = null; dcar.driverMesh = null;
+dcar.maxSpeed = 0; dcar.curSpeed = 0; dcar.heading = 0; dcar.shot = 0;
+dcar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
+dcar.group.position.copy(dcar.pos);
+step(2);
+key('KeyE');
+key('Digit4'); step(20);
+G.player.ammoStore[3] = 500;
+const ammoBeforeDrive = G.player.ammoStore[3];
+handlers.mousedown({ button: 0 }); step(12); handlers.mouseup({ button: 0 });
+check('hero can fire guns while inside a car', G.player.ammoStore[3] < ammoBeforeDrive);
+check('drive-by fire never hits your own car', (dcar.shot || 0) === 0);
+key('KeyE');
+
+// cheat codes
+G.respawn();
+player.hp = 30;
+typeString('health');
+check('cheat "health" refills health', player.hp === 100);
+typeString('armor');
+check('cheat "armor" fills armor', player.armor === 100);
+G.hurtPlayer(30);
+check('armor absorbs damage before health', player.armor === 70 && player.hp === 100);
+G.player.ammoStore[2] = 0;
+G.player.ammoStore[3] = 0;
+typeString('reload');
+check('cheat "reload" fills every weapon magazine',
+  G.player.ammoStore[2] === 100 && G.player.ammoStore[3] === 500);
+G.respawn();
+player.armor = 0;
+
+const waterHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+check('armor bar is shown in the HUD', waterHtml.indexOf('id="armorBar"') >= 0);
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);
