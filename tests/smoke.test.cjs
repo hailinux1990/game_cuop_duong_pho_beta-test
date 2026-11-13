@@ -1015,5 +1015,181 @@ player.armor = 0;
 const waterHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 check('armor bar is shown in the HUD', waterHtml.indexOf('id="armorBar"') >= 0);
 
+
+/* ================= TEST 30: crossing bridges + ~ cheat console ================ */
+G.setTimeOfDay('afternoon');
+G.setWeather('clear');
+step(2);
+G.respawn();
+player.hp = 100; player.armor = 0; player.wanted = 0;
+
+// find one of the raised bridge lanes over the river
+let bridgeX = null;
+for (let x = -180; x <= 180; x += 0.25) {
+  if (G.groundY(x, G.RIVER_Z) > 1.4) { bridgeX = x + 2.5; break; }
+}
+check('bridge deck exists over the river', bridgeX !== null && G.groundY(bridgeX, G.RIVER_Z) > 1.4);
+
+// on foot: standing / walking on the deck is never swimming
+player.pos.set(bridgeX, 0, G.RIVER_Z - 6);
+player.group.position.copy(player.pos);
+step(2);
+check('standing on the bridge deck does not start swimming', player.swimming === false);
+check('hero stands at deck height on the bridge (' + player.group.position.y.toFixed(2) + ' m)',
+  Math.abs(player.group.position.y - 1.5) < 0.2);
+const crossZ0 = player.pos.z;
+key('KeyW'); step(40); keyup('KeyW');
+check('walking across the bridge keeps the hero on the deck',
+  player.swimming === false && player.pos.z > crossZ0 + 1.5 && Math.abs(player.group.position.y - 1.5) < 0.3);
+
+// railings keep the hero on the deck when walking toward the side
+const laneCx = bridgeX + 2.6;
+player.pos.set(bridgeX + 7.2, 0, G.RIVER_Z);
+player.group.position.copy(player.pos);
+step(2);
+key('KeyA'); step(40); keyup('KeyA');
+check('bridge railings stop the hero from walking off the deck into the river',
+  player.pos.x > bridgeX + 7.25 && player.pos.x < laneCx + 5.2 &&
+  G.groundY(player.pos.x, player.pos.z) > 1.4 && player.swimming === false);
+
+// the water next to the bridge lanes is still swimmable
+player.pos.set(bridgeX + 9, 0, G.RIVER_Z);
+player.group.position.copy(player.pos);
+step(2);
+check('water beside the bridge still lets the hero swim', player.swimming === true);
+G.respawn();
+
+// AI cars render on the bridge deck, not in the river
+let rcar = G.cars.find(c => !c.dead);
+if (!rcar) rcar = G.spawnCruiser();
+rcar.dead = false; rcar.driver = null; rcar.driverMesh = null; rcar.stolen = true;
+rcar.curSpeed = 0; rcar.heading = 0; rcar.laneOffset = 0;
+rcar.pos.set(bridgeX, 0, G.RIVER_Z + 1);
+rcar.prevPos.copy(rcar.pos);
+rcar.group.position.copy(rcar.pos);
+step(2);
+check('cars on the bridge ride the deck height (' + rcar.group.position.y.toFixed(2) + ' m)',
+  rcar.group.position.y > 1.3);
+
+// the hero's own car cannot be steered off the bridge into the river
+let railCar = G.cars.find(c => !c.dead && c !== rcar);
+if (!railCar) railCar = G.spawnCruiser();
+railCar.dead = false; railCar.driver = null; railCar.driverMesh = null; railCar.stolen = true;
+railCar.curSpeed = 0; railCar.heading = 0; railCar.laneOffset = 0; railCar.fuseT = undefined; railCar.shot = 0;
+railCar.pos.set(bridgeX + 3, 0, G.RIVER_Z - 8);
+railCar.prevPos.copy(railCar.pos);
+railCar.group.position.copy(railCar.pos);
+player.pos.set(bridgeX + 3, 0, G.RIVER_Z - 10.2);
+player.group.position.copy(player.pos);
+step(2);
+key('KeyE');
+check('hero enters a car parked on the bridge', G.player.inCar === railCar);
+key('KeyW'); key('KeyA'); step(50); keyup('KeyW'); keyup('KeyA');
+check('bridge railings keep the car on the deck while steering into the side (' +
+  G.groundY(railCar.pos.x, railCar.pos.z).toFixed(2) + ')',
+  G.groundY(railCar.pos.x, railCar.pos.z) > 0.9 && G.player.inCar === railCar &&
+  Math.abs(railCar.heading) > 0.2);
+G.respawn();
+
+// ~ opens the command console (game freezes while typing)
+G.respawn();
+player.hp = 30; player.armor = 0;
+handlers.keydown({ code: 'Backquote', key: '~', preventDefault() {} });
+check('pressing ~ opens the cheat command console', G.cheatConsoleOpen === true && G.paused === true);
+const cin = document.getElementById('cheatInput');
+const submitCheat = v => {
+  cin.value = v;
+  cin._h.keydown[0]({ key: 'Enter', target: cin, preventDefault() {}, stopPropagation() {} });
+};
+submitCheat('health');
+check('console "health" refills health', player.hp === 100);
+submitCheat('armor');
+check('console "armor" fills armor', player.armor === 100);
+G.hurtPlayer(25);
+check('console armor soaks damage before health', player.armor === 75 && player.hp === 100);
+player.ammoStore[2] = 0; player.ammoStore[3] = 0; player.ammoStore[4] = 0;
+submitCheat('reload');
+check('console "reload" fills guns and bombs',
+  player.ammoStore[2] === 100 && player.ammoStore[3] === 500 && player.ammoStore[4] === 6);
+submitCheat('giveall');
+check('unknown console command is rejected',
+  String(document.getElementById('cheatOut').textContent).indexOf('KHÔNG') >= 0 && G.cheatConsoleOpen === true);
+document.getElementById('cheatClose')._h.click[0]();
+check('closing the console resumes the game', G.cheatConsoleOpen === false && G.paused === false);
+const ui30 = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+check('cheat command panel is in index.html',
+  ui30.indexOf('id="cheatOverlay"') >= 0 && ui30.indexOf('id="cheatInput"') >= 0 && ui30.indexOf('id="cheatOut"') >= 0);
+check('bomb weapon slot is in the HUD', ui30.indexOf('data-w="4"') >= 0 && ui30.indexOf('BOM') >= 0);
+G.respawn();
+
+/* ================= TEST 31: bomb weapon (throw, blast, chain) ================= */
+G.setTimeOfDay('afternoon');
+G.setWeather('clear');
+step(2);
+G.respawn();
+player.hp = 100; player.armor = 0; player.wanted = 0;
+
+const bombVictim = G.NPCs.find(n => !n.dead && !n.swim && n.type === 'civilian');
+bombVictim.hp = 100;
+bombVictim.dead = false;
+bombVictim.state = 'idle';
+bombVictim.path = [];
+bombVictim.pos.set(player.pos.x, 0, player.pos.z + 12);
+bombVictim.group.position.copy(bombVictim.pos);
+let bombCar = G.cars.find(c => !c.dead);
+if (!bombCar) bombCar = G.spawnCruiser();
+bombCar.dead = false; bombCar.driver = null; bombCar.driverMesh = null; bombCar.stolen = true;
+bombCar.curSpeed = 0; bombCar.heading = 0; bombCar.laneOffset = 0; bombCar.fuseT = undefined; bombCar.shot = 0;
+bombCar.pos.set(player.pos.x + 1.5, 0, player.pos.z + 13.5);
+bombCar.prevPos.copy(bombCar.pos);
+bombCar.group.position.copy(bombCar.pos);
+
+// select the bomb (key 5) and check the HUD
+key('Digit5'); step(20);
+check('weapon 5 selects the BOM', player.weapon === 4);
+check('BOM shows its grenade icon in the HUD',
+  document.getElementById('heldIcon').textContent === '💣');
+check('hero carries 6 bombs to start', player.ammoStore[4] === 6);
+
+aimCameraAtGround(player.pos.z + 12);
+const bombsBefore = G.bombs.length;
+handlers.mousedown({ button: 0 }); step(2); handlers.mouseup({ button: 0 });
+check('clicking throws a bomb into the world', G.bombs.length === bombsBefore + 1 && player.ammoStore[4] === 5);
+
+step(150);                 // fly + 2 s fuse
+check('the bomb explodes (' + G.bombs.length + ' left in the world)', G.bombs.length === 0);
+check('the blast damages people nearby', bombVictim.dead || bombVictim.hp < 100);
+check('the blast ignites cars inside the radius', bombCar.dead || bombCar.fuseT !== undefined);
+check('the blast raises the wanted level', player.wanted > 0);
+check('the hero kept his distance from his own bomb',
+  player.hp === 100 && player.pos.distanceTo(bombVictim.pos) > 8);
+
+// a bomb thrown into the river explodes when it hits the water surface
+G.respawn();
+player.wanted = 0;
+player.ammoStore[4] = 6;
+let shore = null;
+for (let x = -180; x <= 180 && !shore; x += 2) {
+  const z = G.RIVER_Z - G.RIVER_HALF - 4;
+  if (!G.isInsideBuilding(x, z) && !G.isInsideWater(x, z) && !G.swimWaterAt(x, z) && G.groundY(x, z) < 0.5) {
+    if (G.swimWaterAt(x, G.RIVER_Z - 5)) shore = new THREE.Vector3(x, 0, z);
+  }
+}
+check('found a river shore to lob a bomb from', !!shore);
+player.pos.copy(shore);
+player.group.position.copy(shore);
+step(2);
+check('lobbing from the shore does not put the hero in the water', player.swimming === false);
+key('Digit5'); step(20);
+aimCameraAtGround(player.pos.z + 13);
+handlers.mousedown({ button: 0 }); step(2); handlers.mouseup({ button: 0 });
+check('the river bomb leaves the hand', G.bombs.length === 1);
+step(120);
+check('the bomb detonates on the river surface (not stuck underwater)', G.bombs.length === 0);
+check('the hero is still standing dry on the shore',
+  player.swimming === false && G.swimWaterAt(player.pos.x, player.pos.z) === null && player.hp > 0);
+G.respawn();
+player.armor = 0;
+
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

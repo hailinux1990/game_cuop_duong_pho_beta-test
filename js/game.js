@@ -10,6 +10,7 @@
   const PIXEL_SCALE = 1;          // native res for a crisp third-person 3D look
   const MAG_SIZE = 100;           // pistol rounds per full magazine (R to reload)
   const AK_MAG = 500;             // AK-47 rounds per full magazine
+  const BOMB_START = 6;           // throwable grenades carried from the start
 
   /* ---- third-person camera tuning ---- */
   const CAM_PIVOT_H = 1.55;       // orbit pivot at the hero's shoulders
@@ -42,6 +43,9 @@
       name: 'AK-47', icon: '🔫', kind: 'gun', dmg: 30, headDmg: 75, cd: 0.10, mag: AK_MAG, range: 340,
       spread: 0.012, carHits: 3, snd: 'ak', tracer: 0xffc46a, auto: true,
       reload: 1.4, recoil: 0.0045, recoilYaw: 0.004, bloom: 0.14
+    },
+    {
+      name: 'BOM', icon: '💣', kind: 'bomb', dmg: 0, cd: 0.9, mag: BOMB_START, range: 0, snd: 'click'
     }
   ];
   const ASSIST_ANGLE = 0.22;        // rad (~12.6°) GTA-style hip-fire auto-aim cone
@@ -1165,6 +1169,9 @@
   const RIVER_LEVEL = 0.36;
   const SEA_LEVEL = -0.04;
   function swimWaterAt(x, z) {
+    // the raised bridge deck covers the river here: crossing a bridge is
+    // always walking/driving on the deck, never swimming in the water below
+    if (groundY(x, z) > 0.9) return null;
     if (isInsideWater(x, z)) return { level: RIVER_LEVEL, river: true };
     const ax = Math.abs(x), az = Math.abs(z);
     if (ax > GROUND_HALF && ax <= GROUND_HALF + SEA_BAND && az <= GROUND_HALF + 0.5) {
@@ -1188,6 +1195,12 @@
       }
     }
     return 0;
+  }
+
+  // Standing on a raised bridge deck, the railings on both sides keep people
+  // and cars ON the bridge instead of letting them drop into the river below.
+  function bridgeRailBlocks(x, z, fromY) {
+    return fromY > 0.9 && isInsideWater(x, z) && groundY(x, z) < 0.5;
   }
 
   /* ---------------- Road routes for AI cars ---------------- */
@@ -1555,6 +1568,16 @@
     g.userData.knife = handMount(knife, 'wp-knife');
     g.userData.gun = handMount(gun, 'wp-gun');
     g.userData.ak = handMount(ak, 'wp-ak');
+
+    // BOMB: black iron ball with a capped fuse, held ready to throw
+    const bomb = new THREE.Group();
+    const bombBody = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 6), mat(0x26262c));
+    const bombCap = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 0.06, 6), mat(0x9a9a9a));
+    bombCap.position.y = 0.155;
+    const bombFuse = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.16, 0.022), mat(0xe0c679));
+    bombFuse.position.set(0.05, 0.24, 0); bombFuse.rotation.z = 0.55;
+    bomb.add(bombBody, bombCap, bombFuse);
+    g.userData.bomb = handMount(bomb, 'wp-bomb');
     g.userData.armR.add(g.userData.fist);        // default: bare fists on show
 
     const muzzle = new THREE.Group();
@@ -1563,7 +1586,7 @@
     return {
       group: g, pos: SPAWN.clone(), prevPos: SPAWN.clone(), vel: new THREE.Vector3(),
       hp: 100, maxHp: 100, armor: 0, maxArmor: 100, weapon: 0,
-      ammoStore: { 2: MAG_SIZE, 3: AK_MAG },   // per-weapon reserve
+      ammoStore: { 2: MAG_SIZE, 3: AK_MAG, 4: BOMB_START },   // per-weapon reserve
       shotsFired: 0, swimming: false, swimLevel: 0,
       wanted: 0, crimeTimer: 0, speed: 6.4, sprint: 1.65,
       inCar: null, muzzle,
@@ -1585,10 +1608,11 @@
     player.reloadT = 0;                      // switching cancels a reload
     player.bloom = 0;
     const u = player.group.userData, armR = u.armR;
-    [u.knife, u.gun, u.ak, u.fist].forEach(m => armR.remove(m));
+    [u.knife, u.gun, u.ak, u.bomb, u.fist].forEach(m => armR.remove(m));
     if (w === 1) armR.add(u.knife);          // 🔪 in the right hand
     else if (w === 2) armR.add(u.gun);       // pistol in the right hand
     else if (w === 3) armR.add(u.ak);        // rifle in the right hand
+    else if (w === 4) armR.add(u.bomb);      // 💣 grenade in the right hand
     else armR.add(u.fist);                   // bare knuckles on show
     Sfx.click();
     updateWeaponHUD();                       // also refreshes the held-item icon
@@ -1980,11 +2004,21 @@
     }
 
     // sharks: river monsters near the bridges + offshore patrols
+    // (never ON a bridge lane — the deck is dry land, not swimmable water)
     const riverSharkX = [cx(2), cx(5), cx(9)];
     for (let i = 0; i < 3; i++) {
-      const x = riverSharkX[i] + (rng() * 2 - 1) * 8;
-      const z = RIVER_Z + (rng() * 2 - 1) * 6;
-      spawnSharkAt(x, z, 'river');
+      let placed = null;
+      for (let t = 0; t < 40 && !placed; t++) {
+        const x = riverSharkX[i] + (rng() * 2 - 1) * 8;
+        const z = RIVER_Z + (rng() * 2 - 1) * 6;
+        if (swimWaterAt(x, z)) placed = spawnSharkAt(x, z, 'river');
+      }
+      if (!placed) {                       // fallback: right beside the bridge lane
+        for (let off = 7.5; off <= 12 && !placed; off += 1.5) {
+          const x = riverSharkX[i] + (i % 2 ? off : -off);
+          if (swimWaterAt(x, RIVER_Z)) placed = spawnSharkAt(x, RIVER_Z, 'river');
+        }
+      }
     }
     spawnSharkAt((rng() * 2 - 1) * CENTER, -(GROUND_HALF + 12), 'sea');
     spawnSharkAt((rng() * 2 - 1) * CENTER, GROUND_HALF + 12, 'sea');
@@ -2481,6 +2515,122 @@
     }
   }
 
+
+  /* ---------------- BOM: thrown explosive grenade ---------------- */
+  const bombs = [];
+  const BOMB_RADIUS = 6.5;        // blast radius in metres
+  const BOMB_FUSE = 2.0;          // seconds from throw to BOOM
+  const BOMB_GRAV = 22;           // grenade gravity for the lobbed arc
+
+  function makeBombMesh() {
+    const g = new THREE.Group();
+    const bodyM = new THREE.Mesh(new THREE.SphereGeometry(0.19, 8, 6), mat(0x26262c));
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.08, 6), mat(0x8f8f8f));
+    cap.position.y = 0.21;
+    const fuse = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.16, 0.025), mat(0xd9c27a));
+    fuse.position.set(0.05, 0.3, 0); fuse.rotation.z = 0.55;
+    g.add(bodyM, cap, fuse);
+    g.userData.body = bodyM;
+    return g;
+  }
+
+  function throwBomb() {
+    if (!player || player.dead || player.swimming || player.inCar) return;
+    if (!canFire() || player.attackCd > 0) return;
+    if (getAmmo(4) <= 0) {
+      Sfx.empty();
+      toast('HẾT BOM — gõ cheat reload để nạp thêm');
+      player.attackCd = 0.5;
+      return;
+    }
+    player.attackCd = 0.85;
+    setAmmo(4, getAmmo(4) - 1);
+    player.meleeT = player.meleeTotal = 0.34;    // arm-swing throw animation
+    const a = aimInfo();
+    const from = player.pos.clone().setY(1.25);
+    const tgt = a.point.clone();
+    let dx = tgt.x - from.x, dz = tgt.z - from.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist > 34) { const k = 34 / dist; dx *= k; dz *= k; }   // max lob distance
+    const T = Math.max(0.42, Math.min(1.25, Math.hypot(dx, dz) / 12));
+    const vel = new THREE.Vector3(dx / T, 0.5 * BOMB_GRAV * T + (tgt.y - from.y) / T, dz / T);
+    const mesh = makeBombMesh();
+    mesh.position.copy(from);
+    scene.add(mesh);
+    bombs.push({ mesh, pos: from.clone(), vel, fuse: BOMB_FUSE, spin: rng() * Math.PI * 2 });
+    player.shotsFired = (player.shotsFired || 0) + 1;
+    pulseAmmo(); updateAmmoHUD(); updateShotsHUD();
+    Sfx.click();
+    toast('💣 THẢ BOM — chạy ra chỗ khác!');
+  }
+
+  function updateBomb(b, dt) {
+    b.vel.y -= BOMB_GRAV * dt;
+    b.pos.addScaledVector(b.vel, dt);
+    clampToWorld(b.pos);
+    const water = swimWaterAt(b.pos.x, b.pos.z);
+    if (water && b.pos.y <= water.level + 0.1) {   // splashdown over the river/sea
+      b.pos.y = water.level + 0.1;
+      explodeBomb(b);
+      return;
+    }
+    const floorY = groundY(b.pos.x, b.pos.z) + 0.2;
+    if (b.pos.y <= floorY) {                        // lands / small bounce on the ground or bridge deck
+      b.pos.y = floorY;
+      b.vel.y = -b.vel.y * 0.35;
+      b.vel.x *= 0.55; b.vel.z *= 0.55;
+      if (Math.abs(b.vel.y) < 0.4) b.vel.set(0, 0, 0);
+    }
+    b.fuse -= dt;
+    b.spin += dt * 6;
+    b.mesh.position.copy(b.pos);
+    b.mesh.rotation.set(b.spin, b.spin * 0.7, 0);
+    if (b.fuse < 0.8) {                             // blinking fuse warning
+      const on = Math.floor(b.fuse * 16) % 2 === 0;
+      if (b.mesh.userData.body) b.mesh.userData.body.material.color.setHex(on ? 0xff4a30 : 0x26262c);
+    }
+    if (b.fuse <= 0) explodeBomb(b);
+  }
+
+  function explodeBomb(b) {
+    const i = bombs.indexOf(b);
+    if (i >= 0) bombs.splice(i, 1);
+    if (b.mesh.parent) scene.remove(b.mesh);
+    const p = b.pos.clone();
+
+    Sfx.boom();
+    const boom = new THREE.Mesh(new THREE.SphereGeometry(2.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, opacity: 0.95 }));
+    boom.position.copy(p);
+    scene.add(boom);
+    tracers.push({ mesh: boom, life: 0.55, t: 0, grow: true });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 1 }));
+    core.position.copy(p);
+    scene.add(core);
+    tracers.push({ mesh: core, life: 0.35, t: 0, grow: true });
+    for (let k = 0; k < 12; k++) spawnSmoke(p.clone().add(new THREE.Vector3((rng() - 0.5) * 1.6, rng() * 1.3, (rng() - 0.5) * 1.6)), 1 + rng());
+    spawnSparks(p, new THREE.Vector3(0, 1, 0));
+    spawnScorch(new THREE.Vector3(p.x, 0, p.z));
+
+    // everybody inside the blast radius gets it
+    NPCs.forEach(n => {
+      if (n.dead) return;
+      const d = n.pos.distanceTo(p);
+      if (d < BOMB_RADIUS) damageNPC(n, Math.max(25, 140 - d * 18), n.pos.clone().setY(1.1), n.pos.clone().sub(p).normalize());
+    });
+    // cars near the blast catch fire and explode a moment later
+    cars.forEach(c => {
+      if (c.dead) return;
+      if (c.group.position.distanceTo(p) < BOMB_RADIUS && c.fuseT === undefined) c.fuseT = 0.2 + rng() * 0.4;
+    });
+    // the hero can blow himself up too — stand back
+    if (!player.dead) {
+      const pd = player.pos.distanceTo(p);
+      if (pd < BOMB_RADIUS) playerTakeDamage(Math.max(10, 110 - pd * 16), p);
+    }
+    triggerCrime(1.2);
+    toast('💥 BOM NỔ!');
+  }
+
   function triggerCrime(amount) {
     if (player.dead) return;
     player.wanted = Math.min(5, player.wanted + amount);
@@ -2663,8 +2813,10 @@
     if (moving && moveDir.lengthSq() > 0.0001) {
       moveDir.normalize();
       npc.pos.addScaledVector(moveDir, npc.speed * dt);
-      // keep on walkable ground (block sidewalks / roads), avoid buildings
-      if (isInsideBuilding(npc.pos.x, npc.pos.z)) {
+      // keep on walkable ground (block sidewalks / roads), avoid buildings and
+      // the open river/sea — the raised bridge deck is dry ground and allowed
+      const intoWater = isInsideWater(npc.pos.x, npc.pos.z) && groundY(npc.pos.x, npc.pos.z) < 0.5;
+      if (isInsideBuilding(npc.pos.x, npc.pos.z) || intoWater) {
         npc.pos.sub(moveDir.clone().multiplyScalar(npc.speed * dt * 2));
         if (npc.type !== 'police') { npc.target = null; }
       }
@@ -3133,9 +3285,10 @@
     } else if (which === 'reload') {
       player.ammoStore[2] = MAG_SIZE;
       player.ammoStore[3] = AK_MAG;
+      player.ammoStore[4] = BOMB_START;
       player.reloadT = 0;
       updateAmmoHUD(); updateReloadHUD(); updateShotsHUD();
-      toast('CHEAT — FULL ĐẠN MỌI VŨ KHÍ 🔫');
+      toast('CHEAT — FULL ĐẠN + BOM MỌI VŨ KHÍ 🔫💣');
     }
     Sfx.warn();
   }
@@ -3153,6 +3306,7 @@
   }
 
   function onKey(e, down) {
+    if (cheatOpen) return;                 // the cheat console owns the keyboard while open
     keys[e.code] = down;
     if (down) {
       handleKeyPress(e.code);
@@ -3165,6 +3319,8 @@
     else if (code === 'Digit2' || code === 'Numpad2') setPlayerWeapon(1);
     else if (code === 'Digit3' || code === 'Numpad3') setPlayerWeapon(2);
     else if (code === 'Digit4' || code === 'Numpad4') setPlayerWeapon(3);
+    else if (code === 'Digit5' || code === 'Numpad5') setPlayerWeapon(4);
+    else if (code === 'Backquote') openCheatConsole();
     else if (code === 'KeyR') {
       const w = WEAPONS[player.weapon];
       if (w && w.kind === 'melee') toast('Vũ khí cận chiến không cần nạp đạn');
@@ -3384,14 +3540,15 @@
   }
   function moveWithCollision(pos, dx, dz) {
     const r = PLAYER_RADIUS;
+    const deckY = groundY(pos.x, pos.z);
     if (dx !== 0) {
       const nx = pos.x + dx;
-      if (!buildingBlocked(nx, pos.z, r) && !carBlocked(nx, pos.z, r)) pos.x = nx;
-      else player.vel.x = 0;                       // slide along the wall
+      if (!buildingBlocked(nx, pos.z, r) && !carBlocked(nx, pos.z, r) && !bridgeRailBlocks(nx, pos.z, deckY)) pos.x = nx;
+      else player.vel.x = 0;                       // slide along the wall / bridge railing
     }
     if (dz !== 0) {
       const nz = pos.z + dz;
-      if (!buildingBlocked(pos.x, nz, r) && !carBlocked(pos.x, nz, r)) pos.z = nz;
+      if (!buildingBlocked(pos.x, nz, r) && !carBlocked(pos.x, nz, r) && !bridgeRailBlocks(pos.x, nz, deckY)) pos.z = nz;
       else player.vel.z = 0;
     }
   }
@@ -3577,6 +3734,8 @@
     const w = WEAPONS[player.weapon];
     if (w && w.kind === 'gun') {
       if (w.auto ? mouse.down : mouse.pressed) fireGun();
+    } else if (w && w.kind === 'bomb') {
+      if (mouse.pressed) throwBomb();        // one grenade per click
     } else if (mouse.down || mouse.pressed) {
       meleeAttack();
     }
@@ -3597,9 +3756,12 @@
     if (target === 0 && Math.abs(car.curSpeed) < 0.03) car.curSpeed = 0;
 
     if (car.curSpeed !== 0) {
+      const deckY = groundY(car.pos.x, car.pos.z);
       car.pos.addScaledVector(fwd, car.curSpeed * dt);
       clampToWorld(car.pos);
-      if (isInsideBuilding(car.pos.x, car.pos.z)) car.pos.addScaledVector(fwd, -car.curSpeed * dt);
+      const offDeck = bridgeRailBlocks(car.pos.x, car.pos.z, deckY) ||
+        (isInsideWater(car.pos.x, car.pos.z) && deckY < 0.5);   // never drive into the open river
+      if (isInsideBuilding(car.pos.x, car.pos.z) || offDeck) car.pos.addScaledVector(fwd, -car.curSpeed * dt);
     }
     car.group.position.copy(car.pos);
     car.group.rotation.y = car.heading;
@@ -3871,7 +4033,7 @@
   }
   function updateAmmoHUD() {
     const w = WEAPONS[player.weapon];
-    if (w && w.kind === 'gun') ammoN.textContent = getAmmo(player.weapon);
+    if (w && (w.kind === 'gun' || w.kind === 'bomb')) ammoN.textContent = getAmmo(player.weapon);
     else ammoN.textContent = '—';
   }
   function updateShotsHUD() { if (shotsEl) shotsEl.textContent = player.shotsFired || 0; }
@@ -4092,6 +4254,7 @@
       cars.forEach(c => updateCar(c, FIXED_STEP));
       boats.forEach(b => updateBoat(b, FIXED_STEP));
       sharks.forEach(sh => updateShark(sh, FIXED_STEP));
+      bombs.slice().forEach(b => updateBomb(b, FIXED_STEP));
       updateEscalation(FIXED_STEP);
       simAcc -= FIXED_STEP;
       steps++;
@@ -4183,6 +4346,49 @@
     tryPointerLock();
   }
 
+  /* ---------------- Cheat console (press ~) ---------------- */
+  const cheatOverlay = document.getElementById('cheatOverlay');
+  const cheatInput = document.getElementById('cheatInput');
+  const cheatOut = document.getElementById('cheatOut');
+  let cheatOpen = false;
+  let cheatWasPaused = false;
+
+  function openCheatConsole() {
+    if (!player || player.dead || cheatOpen) return;
+    cheatOpen = true;
+    cheatWasPaused = paused;
+    hideGameOverlays();
+    paused = true;                                 // freeze the world while typing the code
+    if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
+    showOverlay(cheatOverlay);
+    if (cheatInput) { cheatInput.value = ''; if (cheatInput.focus) cheatInput.focus(); }
+    if (cheatOut) cheatOut.textContent = '';
+    Sfx.click();
+  }
+  function closeCheatConsole() {
+    if (!cheatOpen) return;
+    cheatOpen = false;
+    hideOverlay(cheatOverlay);
+    if (cheatWasPaused) showOverlay(pauseOverlay);  // came from the pause menu: back to it
+    else { paused = false; tryPointerLock(); }
+  }
+  function runCheatCommand(raw) {
+    if (!cheatOpen) return;
+    const cmd = String(raw || '').trim().toLowerCase();
+    const table = { health: 'HỒI ĐẦY MÁU ❤', armor: 'ĐẦY GIÁP 🛡', reload: 'FULL ĐẠN + BOM 🔫💣' };
+    if (Object.prototype.hasOwnProperty.call(table, cmd)) {
+      applyCheat(cmd);
+      if (cheatOut) cheatOut.textContent = '✔ ' + cmd + ' — ' + table[cmd];
+      if (cheatInput) cheatInput.value = '';
+    } else if (cmd === 'help') {
+      if (cheatOut) cheatOut.textContent = 'CÁC LỆNH: health · armor · reload';
+    } else if (cmd) {
+      if (cheatOut) cheatOut.textContent = '✖ LỆNH KHÔNG HỢP LỆ: "' + cmd + '" — dùng health / armor / reload';
+      Sfx.warn();
+    }
+    if (cheatInput && cheatInput.focus) cheatInput.focus();
+  }
+
   function applyAudioSettings() {
     if (!Sfx.master) return;
     Sfx.master.gain.value = settings.muted ? 0 : (settings.volume / 100) * 0.35;
@@ -4230,6 +4436,12 @@
     on('resumeBtn', 'click', resumeGame);
     on('pauseSettingsBtn', 'click', () => openSettings('pause'));
     on('pauseAboutBtn', 'click', () => openAbout('pause'));
+    on('cheatClose', 'click', closeCheatConsole);
+    on('cheatInput', 'keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') runCheatCommand(e.target.value);
+      else if (e.key === 'Escape') closeCheatConsole();
+    });
 
     const tabs = document.querySelectorAll ? document.querySelectorAll('.tab') : [];
     Array.prototype.forEach.call(tabs, tab => {
@@ -4349,9 +4561,11 @@
     get paused() { return paused; },
     openPause,
     resumeGame,
-    sharks, swimWaterAt,
+    sharks, swimWaterAt, bombs,
     hurtPlayer(dmg) { playerTakeDamage(dmg); },
     applyCheat,
+    get cheatConsoleOpen() { return cheatOpen; },
+    openCheatConsole, closeCheatConsole, runCheatCommand,
     setWeather,
     strikeLightning: triggerLightning,
     setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },

@@ -104,6 +104,15 @@
   .about p { font-size:13px; line-height:1.8; color:#eee; text-align:left; }
   .about .fine { color:#999; font-size:11px; margin:12px 0 18px; }
   .panelBtns { display:flex; justify-content:center; margin-top:18px; }
+  /* ---- Cheat console (press ~) ---- */
+  .cheatPanel { width:min(520px, 92vw); }
+  .cheatPanel .sub { margin-bottom:10px; }
+  .cheatList { text-align:left; margin:6px 0 16px; font-size:13px; letter-spacing:1px; line-height:2.0; color:#ddd; }
+  .cheatList kbd { display:inline-block; min-width:70px; padding:2px 8px; margin-right:8px; background:#120a1c; color:var(--cyan); border:2px solid rgba(79,240,232,.5); font-family:inherit; font-size:12px; letter-spacing:2px; text-align:center; }
+  #cheatInput { width:100%; padding:10px 12px; font-family:inherit; font-size:15px; letter-spacing:2px; color:#fff; background:#0d0616; border:2px solid var(--ui); outline:none; }
+  #cheatInput:focus { box-shadow:0 0 0 2px rgba(255,111,181,.5), 0 0 20px rgba(255,111,181,.35); }
+  #cheatOut { min-height:20px; margin-top:10px; font-size:12px; letter-spacing:1px; color:#ffd25e; text-align:left; }
+  .cheatPanel .fine { color:#999; font-size:11px; margin-top:14px; letter-spacing:1px; }
   #wasted { background:rgba(60,0,20,.85); }
   #wasted h1 { color:#f33; text-shadow:3px 3px 0 #000, 0 0 24px rgba(255,40,40,.6); }
   #flash { position:fixed; inset:0; z-index:8; pointer-events:none; background:#f00; opacity:0; }
@@ -133,6 +142,7 @@
     <span class="wslot" data-w="1"><span class="key">2</span>🔪 DAO</span>
     <span class="wslot" data-w="2"><span class="key">3</span>🔫 SÚNG</span>
     <span class="wslot" data-w="3"><span class="key">4</span>🔫 AK-47</span>
+    <span class="wslot" data-w="4"><span class="key">5</span>💣 BOM</span>
   </div>
 
   <div id="ammoBox" class="hud">
@@ -184,6 +194,23 @@
     </div>
   </div>
 
+  <!-- Cheat console (press ~) -->
+  <div id="cheatOverlay" class="overlay hidden">
+    <div class="panel cheatPanel">
+      <h1>BẢNG LỆNH</h1>
+      <div class="sub">GÕ LỆNH RỒI NHẤN ENTER</div>
+      <div class="cheatList">
+        <div><kbd>health</kbd> Hồi đầy máu</div>
+        <div><kbd>armor</kbd> Đầy giáp</div>
+        <div><kbd>reload</kbd> Full đạn + bom mọi vũ khí</div>
+      </div>
+      <input id="cheatInput" type="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="gõ lệnh…" />
+      <div id="cheatOut"></div>
+      <div class="panelBtns"><button class="btn small" id="cheatClose">✖ ĐÓNG (~ / ESC)</button></div>
+      <div class="fine">Mở bảng lệnh bằng phím ~ khi đang chơi. Trò chơi tạm dừng để bạn gõ lệnh.</div>
+    </div>
+  </div>
+
   <!-- Settings -->
   <div id="settingsOverlay" class="overlay hidden">
     <div class="panel">
@@ -213,9 +240,9 @@
           <div><b>CHUỘT</b> xoay camera · <b>LĂN CHUỘT</b> zoom</div>
           <div><b>CLICK TRÁI</b> bắn/đánh · <b>GIỮ CHUỘT PHẢI</b> ngắm</div>
           <div><b>E</b> lên/xuống xe · <b>C</b> camera sau lưng</div>
-          <div><b>1·2·3·4</b> vũ khí · <b>R</b> nạp đạn</div>
+          <div><b>1·2·3·4·5</b> vũ khí (5 = BOM) · <b>R</b> nạp đạn</div>
           <div><b>T</b> đổi thời tiết · <b>G</b> đổi giờ ngẫu nhiên · <b>M</b> menu</div>
-          <div><b>CHEAT</b> gõ chữ: health · armor · reload</div>
+          <div><b>~</b> bảng CHEAT · gõ nhanh: health · armor · reload</div>
         </div>
       </div>
       <div class="tabBody hidden" id="tabAud">
@@ -233,8 +260,9 @@
       <p><b>PIXEL VICE CITY</b> — game thế giới mở 3D góc nhìn người thứ ba lấy cảm hứng từ GTA Vice City.</p>
       <ul>
         <li>Thành phố mở 11×11 block, 4 khu, sông + cầu, bãi biển, neon hoàng hôn.</li>
-        <li>104 người đi đường, 34 xe, 11 thuyền; truy nã 1–5 sao, cảnh sát truy đuổi, trộm xe, bắn nổ xe.</li>
-        <li>Vũ khí: tay, dao, súng lục, AK-47; auto-aim, nạp đạn có thời gian.</li>
+        <li>112 người đi đường, 34 xe, 11 thuyền, cá mập; truy nã 1–5 sao, cảnh sát truy đuổi, trộm xe, bắn nổ xe.</li>
+        <li>Vũ khí: tay, dao, súng lục, AK-47, bom nổ (5); auto-aim, nạp đạn có thời gian.</li>
+        <li>Bơi sông/biển, bắn từ trong xe, giáp; bảng lệnh cheat mở bằng phím ~.</li>
         <li>Thời tiết ngẫu nhiên nắng/mây/mưa/giông, giờ ngẫu nhiên SÁNG/CHIỀU/TỐI, đồng hồ GMT+7.</li>
       </ul>
       <p class="fine">Game nguyên bản dựng bằng code thủ tục, không sử dụng tài nguyên có bản quyền của Rockstar Games.</p>
