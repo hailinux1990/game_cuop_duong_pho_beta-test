@@ -70,6 +70,19 @@
     sand: 0xd9b98c, shallow: 0x2f8fa0, foam: 0xfff2df, ocean: 0x0e3f5a,
     building: [0x7a6a5a, 0x9a8571, 0x6f7f8f, 0x8a7f8a, 0x5f6a5f, 0x8a7266, 0x75838a, 0x7f6a7a]
   };
+  // FREELIFE (voxel kiểu Minecraft) palette: grass blocks, gray asphalt, stone/brick/glass towers
+  const COLORS_VOX = {
+    ground: 0x8a8a80, road: 0x4a4a4a, sidewalk: 0x6f9f4a, grass: 0x6f9f4a,
+    line: 0xf2f2f2, water: 0x2f6fd0, bridge: 0x8f8f93, railing: 0x5f5f66,
+    sand: 0xe0d090, shallow: 0x3f8fdc, foam: 0xe8f4f8, ocean: 0x1c4f9c,
+    building: [0x9a8f85, 0xb5a89a, 0x8a9a9a, 0xa8a8a0, 0x7a8a7a, 0x9a8470, 0x85939a, 0x8f7f8f]
+  };
+  const VOX_PALS = {
+    nw: [0x9a8f85, 0xb5a89a, 0x8a9a9a, 0xa8a8a0],            // stone gray quarter
+    ne: [0xb07a5a, 0x9a6a4a, 0xc08a5a, 0xa5654a],            // brick quarter
+    sw: [0xd6c8a8, 0xc9b894, 0xbfa87e, 0xd0bd9c],            // sandstone quarter
+    se: [0x7a95a5, 0x6a8a9e, 0x8aa8b8, 0x5f7f95]             // blue glass downtown
+  };
   // Vice City districts: pastel beachfront, coral condos, lavender old town, neon downtown
   const DISTRICT_PALS = {
     nw: [0x63c7c7, 0x86d6d2, 0x53adb8, 0xa0dcd6],            // teal dockside
@@ -91,8 +104,10 @@
   const SETTINGS_KEY = 'pixel-vice-city-settings-v1';
   const settings = {
     quality: 'medium', fov: 62, fxWeather: true, showFps: false,
-    sens: 1, invertY: false, volume: 60, muted: false
+    sens: 1, invertY: false, volume: 60, muted: false,
+    style: 'voxel'      // 'voxel' = FREELIFE kiểu Minecraft, 'vice' = neon Vice City
   };
+  const isVox = () => settings.style === 'voxel';
   function loadSettings() {
     try {
       const raw = window.localStorage && window.localStorage.getItem(SETTINGS_KEY);
@@ -107,6 +122,7 @@
       if (typeof s.invertY === 'boolean') settings.invertY = s.invertY;
       if (typeof s.volume === 'number') settings.volume = Math.max(0, Math.min(100, s.volume));
       if (typeof s.muted === 'boolean') settings.muted = s.muted;
+      if (s.style === 'vice' || s.style === 'voxel') settings.style = s.style;
     } catch (e) { /* private mode / tests */ }
   }
   function saveSettings() {
@@ -926,7 +942,78 @@
     return tex;
   }
 
+  // FREELIFE voxel facade: pixel-grid windows punched into a flat coloured wall,
+  // some rooms lit warm/yellow, some cool/blue — Minecraft-style city blocks.
+  function makeVoxFacade(baseColor, variant) {
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const g = c.getContext('2d');
+    const b = new THREE.Color(baseColor);
+    g.fillStyle = '#' + b.getHexString();
+    g.fillRect(0, 0, 16, 16);
+    const lrng = mulberry32(baseColor * 31 + variant * 17);
+    const frame = '#20242a';
+    const lit = ['#ffe08a', '#9ad8ff', '#fff0b8'];
+    const glass = ['#2b3a4a', '#31455a', '#273647'];
+    for (let i = 0; i < 16; i += 3) {
+      for (let j = 0; j < 16; j += 3) {
+        g.fillStyle = frame;
+        g.fillRect(i, j, 3, 3);
+        const r = lrng();
+        g.fillStyle = r < 0.28 ? lit[(lrng() * lit.length) | 0] : glass[(lrng() * glass.length) | 0];
+        g.fillRect(i + 1, j + 1, 1, 1);
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    return tex;
+  }
+
+  function addVoxBuilding(minX, minZ, maxX, maxZ) {
+    const w = maxX - minX, d = maxZ - minZ;
+    if (w < 4 || d < 4) return;
+    const mx = (minX + maxX) / 2, mz = (minZ + maxZ) / 2;
+
+    let pal = VOX_PALS[mz < RIVER_Z ? (mx < 0 ? 'nw' : 'ne') : (mx < 0 ? 'sw' : 'se')];
+    let h = 4 + Math.pow(rng(), 1.6) * 26;
+    let coreBoost = 0;
+    for (const c of CITY_CORES) {
+      const dist = Math.hypot(mx - c.x, mz - c.z);
+      if (dist < c.r) coreBoost = Math.max(coreBoost, 1 - dist / c.r);
+    }
+    if (coreBoost > 0) {
+      h = 20 + coreBoost * 36 + rng() * 8;
+      if (h > 30) pal = VOX_PALS.se;                    // blue glass skyscrapers
+    }
+
+    // chunky voxel tower: plain box + pixel window walls + flat slab roof
+    const tex = makeVoxFacade(pal[(rng() * pal.length) | 0], (minX * 13 + minZ * 7) | 0);
+    const sideMat = new THREE.MeshLambertMaterial({ map: tex });
+    const topMat = new THREE.MeshLambertMaterial({ color: 0x565a60 });
+    const mats = [sideMat, sideMat, topMat, topMat, sideMat, sideMat];
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+    m.position.set(mx, 0.02 + h / 2, mz);
+    worldGroup.add(m);
+    buildingMeshes.push(m);
+
+    if (h > 30) {                                       // rooftop box + antenna
+      worldGroup.add(box(Math.min(4, w * 0.35), 1.4, Math.min(4, d * 0.35), 0x3c4046, mx, 0.02 + h + 0.7, mz));
+      worldGroup.add(box(0.26, 2.6, 0.26, 0x2b2e33, mx + w * 0.25, 0.02 + h + 1.8, mz - d * 0.2));
+    }
+    if (w > 5 && d > 4 && rng() < 0.4) {                // street-level storefront slab
+      worldGroup.add(box(Math.min(w * 0.6, 6), 0.9, 0.14, 0x9a8f85, mx, 0.6, maxZ + 0.05));
+    }
+
+    buildingBoxes.push({
+      minX, maxX, minZ, maxZ, h,
+      cx: mx, cz: mz,
+      mats: [sideMat, topMat], fade: 1, lastOp: 1
+    });
+  }
+
   function addBuilding(minX, minZ, maxX, maxZ) {
+    if (isVox()) { addVoxBuilding(minX, minZ, maxX, maxZ); return; }
     const w = maxX - minX, d = maxZ - minZ;
     if (w < 4 || d < 4) return;
     const mx = (minX + maxX) / 2, mz = (minZ + maxZ) / 2;
@@ -986,9 +1073,26 @@
     });
   }
 
-  /* Palm trees for the Vice City beachfront */
+  /* Trees: Vice City palms or FREELIFE blocky voxel trees */
   function addTree(x, z) {
     const g = new THREE.Group();
+    if (isVox()) {
+      // Minecraft-style: brown block trunk + green cube canopy
+      const trunk = new THREE.Mesh(new THREE.BoxGeometry(0.34, 3.1, 0.34), mat(0x6a4a2a));
+      trunk.position.y = 1.55;
+      g.add(trunk);
+      const leafMat = mat(0x3f8a3f);
+      const leafMatDark = mat(0x357a35);
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const leaf = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.72, 0.72), (i + j) % 2 ? leafMat : leafMatDark);
+        leaf.position.set(i * 0.6, 3.1 + Math.abs(j) * 0.55, j * 0.6);
+        g.add(leaf);
+      }
+      g.position.set(x, 0.02, z);
+      g.rotation.y = rng() * Math.PI * 2;
+      worldGroup.add(g);
+      return;
+    }
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.24, 3.4, 5), mat(0x7a5a38));
     trunk.position.y = 1.7;
     trunk.rotation.z = (rng() - 0.5) * 0.16;
@@ -1010,24 +1114,25 @@
 
   function buildCity() {
     if (built) return;
+    const C = isVox() ? COLORS_VOX : COLORS;     // FREELIFE voxel vs Vice City neon palette
     /* sand island frame around the city base (edge-to-edge, no coplanar overlap) */
     const ISLE = (CITY + ROAD + 8) / 2;                 // 201
     const FRAME = GROUND_HALF - ISLE;                    // 13.5 m of beach
     const sandY = -0.5;
-    worldGroup.add(box(GROUND_HALF * 2, 1, FRAME, COLORS.sand, 0, sandY, ISLE + FRAME / 2));
-    worldGroup.add(box(GROUND_HALF * 2, 1, FRAME, COLORS.sand, 0, sandY, -ISLE - FRAME / 2));
-    worldGroup.add(box(FRAME, 1, ISLE * 2, COLORS.sand, ISLE + FRAME / 2, sandY, 0));
-    worldGroup.add(box(FRAME, 1, ISLE * 2, COLORS.sand, -ISLE - FRAME / 2, sandY, 0));
+    worldGroup.add(box(GROUND_HALF * 2, 1, FRAME, C.sand, 0, sandY, ISLE + FRAME / 2));
+    worldGroup.add(box(GROUND_HALF * 2, 1, FRAME, C.sand, 0, sandY, -ISLE - FRAME / 2));
+    worldGroup.add(box(FRAME, 1, ISLE * 2, C.sand, ISLE + FRAME / 2, sandY, 0));
+    worldGroup.add(box(FRAME, 1, ISLE * 2, C.sand, -ISLE - FRAME / 2, sandY, 0));
     // city base slab (asphalt) — top face just under the painted road surfaces
-    worldGroup.add(box(ISLE * 2, 0.6, ISLE * 2, COLORS.ground, 0, -0.3, 0));
+    worldGroup.add(box(ISLE * 2, 0.6, ISLE * 2, C.ground, 0, -0.3, 0));
 
     /* ---- Vice City bay: shallow lagoon ring + open ocean out to the horizon ---- */
-    const ocean = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshLambertMaterial({ color: COLORS.ocean }));
+    const ocean = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000), new THREE.MeshLambertMaterial({ color: C.ocean }));
     ocean.rotation.x = -Math.PI / 2;
     ocean.position.set(0, -0.6, 0);
     worldGroup.add(ocean);
     const BAND = 28;
-    const shallowMat = new THREE.MeshLambertMaterial({ color: COLORS.shallow });
+    const shallowMat = new THREE.MeshLambertMaterial({ color: C.shallow });
     const bands = [
       [0, -GROUND_HALF - BAND / 2, GROUND_HALF * 2 + BAND * 2, BAND],
       [0, GROUND_HALF + BAND / 2, GROUND_HALF * 2 + BAND * 2, BAND],
@@ -1042,34 +1147,34 @@
     }
     // white surf line where the sand meets the water
     const F = 1.8;
-    worldGroup.add(plane(GROUND_HALF * 2 + F * 2, F, COLORS.foam, 0, 0.01, GROUND_HALF + F / 2));
-    worldGroup.add(plane(GROUND_HALF * 2 + F * 2, F, COLORS.foam, 0, 0.01, -GROUND_HALF - F / 2));
-    worldGroup.add(plane(F, GROUND_HALF * 2 + F * 2, COLORS.foam, GROUND_HALF + F / 2, 0.01, 0));
-    worldGroup.add(plane(F, GROUND_HALF * 2 + F * 2, COLORS.foam, -GROUND_HALF - F / 2, 0.01, 0));
+    worldGroup.add(plane(GROUND_HALF * 2 + F * 2, F, C.foam, 0, 0.01, GROUND_HALF + F / 2));
+    worldGroup.add(plane(GROUND_HALF * 2 + F * 2, F, C.foam, 0, 0.01, -GROUND_HALF - F / 2));
+    worldGroup.add(plane(F, GROUND_HALF * 2 + F * 2, C.foam, GROUND_HALF + F / 2, 0.01, 0));
+    worldGroup.add(plane(F, GROUND_HALF * 2 + F * 2, C.foam, -GROUND_HALF - F / 2, 0.01, 0));
 
     // roads (darker)
     for (let i = 0; i <= N; i++) {
-      worldGroup.add(plane(ROAD, CITY, COLORS.road, cx(i), 0.02, 0, undefined, 2));
-      worldGroup.add(plane(CITY, ROAD, COLORS.road, 0, 0.02, cz(i), undefined, 2));
+      worldGroup.add(plane(ROAD, CITY, C.road, cx(i), 0.02, 0, undefined, 2));
+      worldGroup.add(plane(CITY, ROAD, C.road, 0, 0.02, cz(i), undefined, 2));
     }
 
     // lane markings (dashed center line)
     for (let i = 0; i <= N; i++) {
       // along x road (horizontal), z = cz(i)
       for (let s = -CENTER; s < CENTER; s += 8) {
-        worldGroup.add(plane(3.2, 0.28, COLORS.line, s + 2, 0.03, cz(i), undefined, 3));
+        worldGroup.add(plane(3.2, 0.28, C.line, s + 2, 0.03, cz(i), undefined, 3));
       }
       // along z road (vertical), x = cx(i)
       for (let s = -CENTER; s < CENTER; s += 8) {
-        worldGroup.add(plane(0.28, 3.2, COLORS.line, cx(i), 0.03, s + 2, undefined, 3));
+        worldGroup.add(plane(0.28, 3.2, C.line, cx(i), 0.03, s + 2, undefined, 3));
       }
     }
 
     // ---- river splitting the city (GTA 1 style), crossed by bridges on every avenue ----
-    worldGroup.add(box(ISLE * 2, 0.12, RIVER_HALF * 2, COLORS.water, 0, 0.3, RIVER_Z));
+    worldGroup.add(box(ISLE * 2, 0.12, RIVER_HALF * 2, C.water, 0, 0.3, RIVER_Z));
     // river banks: sandy promenade along the water edge
-    worldGroup.add(box(ISLE * 2, 0.14, 2.5, COLORS.sand, 0, 0.31, RIVER_Z - RIVER_HALF - 1));
-    worldGroup.add(box(ISLE * 2, 0.14, 2.5, COLORS.sand, 0, 0.31, RIVER_Z + RIVER_HALF + 1));
+    worldGroup.add(box(ISLE * 2, 0.14, 2.5, C.sand, 0, 0.31, RIVER_Z - RIVER_HALF - 1));
+    worldGroup.add(box(ISLE * 2, 0.14, 2.5, C.sand, 0, 0.31, RIVER_Z + RIVER_HALF + 1));
 
     // blocks: sidewalk slab + buildings
     for (let bi = 0; bi < N; bi++) for (let bj = 0; bj < N; bj++) {
@@ -1077,7 +1182,7 @@
       const minZ = cz(bj) + ROAD / 2, maxZ = cz(bj + 1) - ROAD / 2;
       // no buildings inside the river
       if (!(maxZ < RIVER_Z - RIVER_HALF || minZ > RIVER_Z + RIVER_HALF)) continue;
-      worldGroup.add(plane(BLOCK, BLOCK, COLORS.sidewalk, (minX + maxX) / 2, 0.02, (minZ + maxZ) / 2, undefined, 2));
+      worldGroup.add(plane(BLOCK, BLOCK, C.sidewalk, (minX + maxX) / 2, 0.02, (minZ + maxZ) / 2, undefined, 2));
 
       // simple lot layout
       const gap = 1.2;
@@ -1131,18 +1236,18 @@
     // to tilt — rotating the returned value would tilt the entire world group!
     const rampAngle = Math.atan2(DECK_Y, RAMP_LEN);
     for (let i = 0; i <= N; i++) {
-      worldGroup.add(box(ROAD, 0.14, RIVER_HALF * 2 + 4, COLORS.bridge, cx(i), DECK_Y - 0.07, RIVER_Z));
-      const rampN = box(ROAD, 0.12, RAMP_LEN, COLORS.bridge, cx(i), DECK_Y / 2, RIVER_Z - RIVER_HALF - 2 - RAMP_LEN / 2);
+      worldGroup.add(box(ROAD, 0.14, RIVER_HALF * 2 + 4, C.bridge, cx(i), DECK_Y - 0.07, RIVER_Z));
+      const rampN = box(ROAD, 0.12, RAMP_LEN, C.bridge, cx(i), DECK_Y / 2, RIVER_Z - RIVER_HALF - 2 - RAMP_LEN / 2);
       rampN.rotation.x = -rampAngle;                       // north ramp: dips AWAY from deck
       worldGroup.add(rampN);
-      const rampS = box(ROAD, 0.12, RAMP_LEN, COLORS.bridge, cx(i), DECK_Y / 2, RIVER_Z + RIVER_HALF + 2 + RAMP_LEN / 2);
+      const rampS = box(ROAD, 0.12, RAMP_LEN, C.bridge, cx(i), DECK_Y / 2, RIVER_Z + RIVER_HALF + 2 + RAMP_LEN / 2);
       rampS.rotation.x = rampAngle;                        // south ramp mirrored
       worldGroup.add(rampS);
-      worldGroup.add(box(0.35, 0.8, RIVER_HALF * 2 + 4, COLORS.railing, cx(i) - ROAD / 2 + 0.25, DECK_Y + 0.36, RIVER_Z));
-      worldGroup.add(box(0.35, 0.8, RIVER_HALF * 2 + 4, COLORS.railing, cx(i) + ROAD / 2 - 0.25, DECK_Y + 0.36, RIVER_Z));
+      worldGroup.add(box(0.35, 0.8, RIVER_HALF * 2 + 4, C.railing, cx(i) - ROAD / 2 + 0.25, DECK_Y + 0.36, RIVER_Z));
+      worldGroup.add(box(0.35, 0.8, RIVER_HALF * 2 + 4, C.railing, cx(i) + ROAD / 2 - 0.25, DECK_Y + 0.36, RIVER_Z));
       // lane markings across the deck
       for (let s = RIVER_Z - RIVER_HALF + 3; s < RIVER_Z + RIVER_HALF - 3; s += 8) {
-        worldGroup.add(plane(0.28, 3.2, COLORS.line, cx(i), DECK_Y + 0.02, s));
+        worldGroup.add(plane(0.28, 3.2, C.line, cx(i), DECK_Y + 0.02, s));
       }
     }
 
@@ -1304,7 +1409,150 @@
   }
   const PRINT_ACCENTS = [0xff3fa4, 0x2fa8a0, 0xffcf4f, 0x7a4a22, 0xff6f91, 0xf7f0e0, 0x2f6fbf];
 
+  /* ---------------- FREELIFE voxel humans (Minecraft-style blocks) ---------------- */
+  const _voxTex = {};
+  function voxShirtTexture(color, variant) {
+    const key = color + ':' + (variant % 5);
+    if (_voxTex[key]) return _voxTex[key];
+    const c = document.createElement('canvas');
+    c.width = 16; c.height = 16;
+    const g = c.getContext('2d');
+    const b = new THREE.Color(color);
+    g.fillStyle = '#' + b.getHexString();
+    g.fillRect(0, 0, 16, 16);
+    const dark = new THREE.Color(color).multiplyScalar(0.78);
+    g.fillStyle = '#' + dark.getHexString();
+    const lrng = mulberry32(color * 7 + variant * 13);
+    for (let k = 0; k < 14; k++) g.fillRect((lrng() * 16) | 0, (lrng() * 16) | 0, 1, 1);
+    g.fillStyle = '#' + new THREE.Color(color).multiplyScalar(0.6).getHexString();
+    for (let x = 0; x < 16; x += 2) g.fillRect(x, 0, 1, 1);   // darker collar seam
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    _voxTex[key] = tex;
+    return tex;
+  }
+  const _voxFace = {};
+  function voxFaceTexture(skin, hairColor, variant) {
+    const key = skin + ':' + hairColor + ':' + (variant % 7);
+    if (_voxFace[key]) return _voxFace[key];
+    const c = document.createElement('canvas');
+    c.width = 8; c.height = 8;
+    const g = c.getContext('2d');
+    g.fillStyle = '#' + new THREE.Color(skin).getHexString();
+    g.fillRect(0, 0, 8, 8);
+    if (hairColor !== null) {                        // pixel hair fringe on top
+      g.fillStyle = '#' + new THREE.Color(hairColor).getHexString();
+      g.fillRect(1, 0, 6, 1);
+      g.fillRect(0, 1, 1, 1); g.fillRect(7, 1, 1, 1);
+      g.fillRect(1, 1, 2, 1); g.fillRect(5, 1, 2, 1);
+    }
+    g.fillStyle = '#ffffff';                         // eyes
+    g.fillRect(2, 3, 1, 1); g.fillRect(5, 3, 1, 1);
+    g.fillStyle = '#3b2a1a';                         // pupils + mouth
+    g.fillRect(2, 4, 1, 1); g.fillRect(5, 4, 1, 1);
+    g.fillRect(3, 5, 2, 1);
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    tex.minFilter = THREE.NearestFilter;
+    _voxFace[key] = tex;
+    return tex;
+  }
+
+  function makeVoxHuman(opt) {
+    const g = new THREE.Group();
+    const female = !!opt.female;
+    const skin = opt.skin || 0xe8b88a, shirt = opt.shirt || 0x3366ff, pants = opt.pants || 0x2c2c34;
+    const skinM = mat(skin), pantsM = mat(pants), hairM = mat(opt.hair || 0x241c14);
+    const shirtM = new THREE.MeshLambertMaterial({ map: voxShirtTexture(shirt, (opt.shirt + (opt.shirt * 3)) | 0) });
+    const shoeM = mat(opt.shoe || 0x18171c), eyeM = mat(0x141416), whiteM = mat(0xf2efe6), detailM = mat(0x2a1c14);
+    const shoulderX = female ? 0.27 : 0.3;
+    const skirt = !!opt.skirt;
+    const legsMat = skirt ? skinM : pantsM;
+    const parts = [];
+    const add = (m) => { g.add(m); parts.push(m); return m; };
+    const M = (geo, material) => new THREE.Mesh(geo, material);
+
+    // hips, belt, blocky chest
+    const pelvis = M(new THREE.BoxGeometry(0.36, 0.22, 0.26), pantsM); pelvis.position.set(0, 0.92, 0);
+    const belt = M(new THREE.BoxGeometry(0.38, 0.05, 0.28), mat(opt.belt || 0x24242a)); belt.position.set(0, 1.04, 0);
+    const torso = M(new THREE.BoxGeometry(0.46, 0.6, 0.26), shirtM); torso.position.set(0, 1.3, 0);
+    add(pelvis); add(belt); add(torso);
+    let skirtMesh = null;
+    if (skirt) {
+      skirtMesh = M(new THREE.BoxGeometry(0.4, 0.44, 0.32), mat(opt.skirtColor || pants)); skirtMesh.position.set(0, 0.76, 0);
+      add(skirtMesh);
+    }
+
+    // neck + big cube head with a painted pixel face (front = +Z)
+    const neck = M(new THREE.BoxGeometry(0.12, 0.1, 0.12), skinM); neck.position.set(0, 1.63, 0); add(neck);
+    const faceTex = voxFaceTexture(skin, opt.hairStyle === 'bald' && !opt.hat ? null : (opt.hair || 0x241c14), (skin * 5 + opt.shirt) | 0);
+    const head = M(new THREE.BoxGeometry(0.44, 0.44, 0.44), new THREE.MeshLambertMaterial({ map: faceTex }));
+    head.position.set(0, 1.87, 0); add(head);
+    const faceZ = 0.225;
+    if (opt.face) {                                   // hero: crisp 3D eyes on the face
+      const eWL = M(G_EYEWHITE(), whiteM); eWL.position.set(-0.062, 1.88, faceZ);
+      const eWR = eWL.clone(); eWR.position.x = 0.062;
+      const pL = M(G_PUPIL(), eyeM); pL.position.set(-0.062, 1.88, faceZ + 0.012);
+      const pR = pL.clone(); pR.position.x = 0.062;
+      add(eWL); add(eWR); add(pL); add(pR);
+      [eWL, eWR, pL, pR].forEach(m => { m.userData.head = true; });
+    } else if (opt.sunglasses) {
+      const glasses = M(G_SUNGLASSES(), eyeM); glasses.position.set(0, 1.87, faceZ);
+      add(glasses); glasses.userData.head = true;
+    }
+    const mouth = M(new THREE.BoxGeometry(0.02, 0.02, 0.02), detailM); mouth.position.set(0, 1.72, faceZ); add(mouth); mouth.userData.head = true;
+
+    // hair / cap
+    let hair = null;
+    if (opt.hat) {
+      const hatMat = mat(opt.capColor || 0x1f3a6f);
+      const cap = M(G_CAP(), hatMat); cap.position.set(0, 2.12, 0); add(cap); cap.userData.head = true;
+      const brim = M(G_CAPBRIM(), hatMat); brim.position.set(0, 2.07, 0.24); add(brim); brim.userData.head = true;
+      hair = cap;
+    } else if (opt.hairStyle !== 'bald') {
+      hair = M(new THREE.BoxGeometry(0.46, 0.12, 0.46), hairM); hair.position.set(0, 2.13, 0); add(hair); hair.userData.head = true;
+      if (opt.hairStyle === 'long') {
+        const back = M(new THREE.BoxGeometry(0.32, 0.34, 0.12), hairM); back.position.set(0, 1.72, -0.24); add(back); back.userData.head = true;
+      }
+    }
+
+    // blocky arms + hands (same shoulder pivots as the vice rig)
+    const armR = M(new THREE.BoxGeometry(0.16, 0.54, 0.16).translate(0, -0.27, 0), shirtM); armR.position.set(-shoulderX, 1.45, 0);
+    const armL = M(new THREE.BoxGeometry(0.16, 0.54, 0.16).translate(0, -0.27, 0), shirtM); armL.position.set(shoulderX, 1.45, 0);
+    const handR = M(G_HAND(), skinM); handR.position.set(0, -0.54, 0.02);
+    const handL = M(G_HAND(), skinM); handL.position.set(0, -0.54, 0.02);
+    armR.add(handR); armL.add(handL);
+    add(armL); add(armR); parts.push(handL, handR);
+
+    // blocky legs + shoes
+    const legL = M(new THREE.BoxGeometry(0.2, 0.62, 0.2).translate(0, -0.31, 0), legsMat); legL.position.set(-0.105, 0.81, 0);
+    const legR = M(new THREE.BoxGeometry(0.2, 0.62, 0.2).translate(0, -0.31, 0), legsMat); legR.position.set(0.105, 0.81, 0);
+    const shoeL = M(new THREE.BoxGeometry(0.22, 0.14, 0.34), shoeM); shoeL.position.set(0, -0.6, 0.03);
+    const shoeR = M(new THREE.BoxGeometry(0.22, 0.14, 0.34), shoeM); shoeR.position.set(0, -0.6, 0.03);
+    legL.add(shoeL); legR.add(shoeR);
+    add(legL); add(legR); parts.push(shoeL, shoeR);
+
+    if (opt.badge) {
+      const badge = M(G_BADGE(), mat(0xffcf4f)); badge.position.set(0.12, 1.4, 0.14); add(badge);
+    }
+    if (opt.necklace) {
+      const chain = M(G_CHAIN(), mat(0xffd24f)); chain.position.set(0, 1.36, 0.135); add(chain);
+    }
+
+    add(blobShadow(0.42));
+    parts.pop();
+    if (opt.scale) g.scale.setScalar(opt.scale);
+
+    g.userData = {
+      body: torso, head, hair, legL, legR, armL, armR, shoeL, shoeR, handL, handR,
+      pelvis, belt, neck, jaw: null, skirt: skirtMesh, parts
+    };
+    return g;
+  }
+
   function makeHuman(opt) {
+    if (isVox()) return makeVoxHuman(opt);
     const g = new THREE.Group();
     const female = !!opt.female;
     const skin = opt.skin || 0xe8b88a, shirt = opt.shirt || 0x3366ff, pants = opt.pants || 0x2c2c34;
@@ -1405,7 +1653,54 @@
     return g;
   }
 
+  // FREELIFE voxel car: flat-colour blocks, square wheels, slab cabin
+  function makeVoxCar(opt) {
+    const g = new THREE.Group();
+    const bodyC = opt.color || 0xc23a2e;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.62, 3.4), mat(bodyC));
+    body.position.y = 0.62;
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.62, 0.7, 1.55), mat(opt.isPolice ? 0x14181f : 0x2a3038));
+    cabin.position.set(0, 1.24, -0.15);
+    const hood = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.16, 0.9), mat(bodyC));
+    hood.position.set(0, 0.9, 1.4);
+    const trunk = new THREE.Mesh(new THREE.BoxGeometry(1.66, 0.16, 0.85), mat(bodyC));
+    trunk.position.set(0, 0.9, -1.5);
+
+    const wheels = [];
+    [[-0.92, 1.05], [0.92, 1.05], [-0.92, -1.15], [0.92, -1.15]].forEach(([wx, wz]) => {
+      const w = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.68, 0.68), mat(0x141414));
+      w.position.set(wx, 0.34, wz);
+      wheels.push(w); g.add(w);
+    });
+    g.add(body, cabin, hood, trunk);
+
+    if (opt.isPolice) {
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.9), mat(0x222));
+      bar.position.set(0, 1.66, -0.15);
+      const lr = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.12, 0.3), new THREE.MeshBasicMaterial({ color: 0xff2222 }));
+      lr.position.set(0, 1.74, -0.15);
+      const lb = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.12, 0.3), new THREE.MeshBasicMaterial({ color: 0x2244ff }));
+      lb.position.set(0, 1.74, -0.15);
+      g.add(bar, lr, lb);
+      g.userData.lightRed = lr; g.userData.lightBlue = lb;
+    }
+    const doorGeo = new THREE.BoxGeometry(0.06, 0.5, 1.1);
+    const doorL = new THREE.Mesh(doorGeo, mat(bodyC));
+    const doorR = new THREE.Mesh(doorGeo, mat(bodyC));
+    const hingeL = new THREE.Group(); hingeL.position.set(-0.9, 0.62, 0.6); doorL.position.set(0, 0, -0.55); hingeL.add(doorL);
+    const hingeR = new THREE.Group(); hingeR.position.set(0.9, 0.62, 0.6); doorR.position.set(0, 0, -0.55); hingeR.add(doorR);
+    g.add(hingeL, hingeR);
+    g.add(blobShadow(1.1));
+    g.userData.wheels = wheels;
+    g.userData.body = body;
+    g.userData.cabin = cabin; g.userData.hood = hood; g.userData.trunk = trunk;
+    g.userData.doorL = hingeL; g.userData.doorR = hingeR;
+    g.userData.doorMeshes = [doorL, doorR];
+    return g;
+  }
+
   function makeCar(opt) {
+    if (isVox()) return makeVoxCar(opt);
     const g = new THREE.Group();
     const bodyC = opt.color || 0xc23a2e;
     const body = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.5, 3.3), mat(bodyC));
@@ -2025,6 +2320,66 @@
     spawnSharkAt(GROUND_HALF + 12, (rng() * 2 - 1) * CENTER, 'sea');
 
     spawned = true;
+  }
+
+  /* ---------------- Graphics style switch (VICE CITY <-> FREELIFE voxel) ---------------- */
+  function applyWorldStyle(style) {
+    if (style !== 'voxel' && style !== 'vice') return;
+    if (settings.style === style) { toast('Phong cách đồ họa: ' + (style === 'voxel' ? 'FREELIFE' : 'VICE CITY')); return; }
+    settings.style = style;
+    saveSettings();
+
+    const pv = player ? {
+      hp: player.hp, armor: player.armor, wanted: player.wanted, weapon: player.weapon,
+      ammo2: player.ammoStore[2], ammo3: player.ammoStore[3], ammo4: player.ammoStore[4]
+    } : null;
+    const oldPlayer = player;                       // keep the object identity: tests hold a reference
+
+    // tear down every entity and the whole city, then rebuild in the new style
+    const drop = (obj) => { if (obj && obj.parent) obj.parent.remove(obj); };
+    NPCs.forEach(n => drop(n.group));
+    cars.forEach(c => drop(c.group));
+    boats.forEach(b => drop(b.group));
+    sharks.forEach(s => drop(s.group));
+    bombs.forEach(b => drop(b.mesh));
+    tracers.forEach(t => drop(t.mesh));
+    smokes.forEach(t => drop(t.mesh));
+    bloodParticles.forEach(p => drop(p.mesh));
+    splats.forEach(p => drop(p.mesh));
+    corpses.forEach(n => drop(n.group));
+    if (player) { if (player.inCar) { player.inCar.driver = null; player.inCar = null; } drop(player.group); }
+    while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]);
+    NPCs.length = 0; cars.length = 0; boats.length = 0; sharks.length = 0;
+    corpses.length = 0; bloodParticles.length = 0; splats.length = 0;
+    tracers.length = 0; smokes.length = 0; bombs.length = 0; hittables.length = 0;
+    buildingBoxes.length = 0; buildingMeshes.length = 0;
+    player = null;
+    built = false; spawned = false;
+    beatRankCache = null;
+
+    buildCity();
+    buildRoutes();
+    spawnWorld();
+    buildMinimapStatic();
+    updateMinimap();
+
+    // rebuild the hero but transplant the fresh state into the ORIGINAL object
+    // so outside references (tests, hooks) keep working
+    const fresh = createPlayer();
+    player = oldPlayer || fresh;
+    if (oldPlayer) for (const k of Object.keys(fresh)) player[k] = fresh[k];
+    player.group.position.copy(player.pos);
+    player.group.rotation.y = 0;
+    if (pv) {
+      player.hp = pv.hp; player.armor = pv.armor; player.wanted = pv.wanted;
+      player.ammoStore[2] = pv.ammo2; player.ammoStore[3] = pv.ammo3; player.ammoStore[4] = pv.ammo4;
+      if (pv.weapon !== 0) setPlayerWeapon(pv.weapon);
+    }
+    camYaw = 0; camPitch = -0.17; camDist = CAM_DIST; camInit = false;
+    snapCamera();
+    updateHealthHUD(); updateWantedHUD(); updateWeaponHUD(); updateAmmoHUD();
+    updateShotsHUD(); updateReloadHUD(); updateVehicleHUD();
+    toast('Phong cách đồ họa: ' + (style === 'voxel' ? 'FREELIFE (voxel)' : 'VICE CITY (neon)'));
   }
 
   /* ---------------- Blood FX ---------------- */
@@ -4405,6 +4760,7 @@
     const vol = document.getElementById('aVol'); if (vol) vol.value = settings.volume;
     const volV = document.getElementById('aVolVal'); if (volV) volV.textContent = settings.volume;
     const mute = document.getElementById('aMute'); if (mute) mute.checked = !!settings.muted;
+    const stl = document.getElementById('qStyle'); if (stl) stl.value = settings.style;
     if (fpsBox) fpsBox.classList.toggle('hidden', !settings.showFps);
   }
   function applySettings() {
@@ -4456,6 +4812,7 @@
       });
     });
 
+    on('qStyle', 'change', e => applyWorldStyle(e.target.value));
     on('qQuality', 'change', e => { settings.quality = e.target.value; applySettings(); });
     on('qFov', 'input', e => {
       settings.fov = +e.target.value;
@@ -4555,6 +4912,7 @@
     get settings() { return Object.assign({}, settings); },
     setSetting(key, value) {
       if (!(key in settings)) return;
+      if (key === 'style') { applyWorldStyle(value); return; }
       settings[key] = value;
       applySettings();
     },
@@ -4566,6 +4924,7 @@
     applyCheat,
     get cheatConsoleOpen() { return cheatOpen; },
     openCheatConsole, closeCheatConsole, runCheatCommand,
+    applyWorldStyle, isVox,
     setWeather,
     strikeLightning: triggerLightning,
     setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },

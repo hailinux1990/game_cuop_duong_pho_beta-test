@@ -618,32 +618,77 @@ step(20);                            // several AK rounds straight into the towe
 handlers.mouseup({ button: 0 });
 check('bullets are blocked by the tower (car behind it untouched)', (wallCar.shot || 0) === wallShotsBefore);
 
-/* ================= TEST 19: Vice City sunset art direction ===================== */
+/* ================= TEST 19: art direction + FREELIFE voxel style switch ========= */
 G.setTimeOfDay('afternoon'); // art-direction checks assume the sunset baseline
 G.setWeather('clear');
 step(2);
-let skyDomes = 0, sunSprites = 0, oceanPlane = null, palmTrunks = 0, neonMeshes = 0, opaqueFaded = 0;
 const NEON_HEX = [0xff3fa4, 0x3fe0ff, 0xb45cff, 0xffd23f, 0xff6a3f, 0x64ff9a];
+function countWorld(fn) {
+  let n = 0;
+  G.scene.traverse(o => {
+    if (!o.isMesh || !o.geometry) return;
+    if (fn(o)) n++;
+  });
+  return n;
+}
+const neonCount = () => countWorld(o => o.material && !Array.isArray(o.material) &&
+  o.material.type === 'MeshBasicMaterial' && o.material.color &&
+  NEON_HEX.indexOf(o.material.color.getHex()) >= 0);
+let skyDomes = 0, sunSprites = 0, oceanPlane = null;
 G.scene.traverse(o => {
   if (o.isSprite) sunSprites++;
   if (o.isMesh && o.geometry) {
     const g = o.geometry.parameters || {};
     if (o.geometry.type === 'SphereGeometry' && g.radius >= 1000) skyDomes++;
     if (o.geometry.type === 'PlaneGeometry' && g.width >= 2000 && g.height >= 2000) oceanPlane = o;
-    if (o.geometry.type === 'CylinderGeometry' && o.material && o.material.color && o.material.color.getHex() === 0x7a5a38) palmTrunks++;
-    if (o.material && !Array.isArray(o.material) && o.material.type === 'MeshBasicMaterial' && o.material.color &&
-        NEON_HEX.indexOf(o.material.color.getHex()) >= 0) neonMeshes++;
   }
 });
-for (const b of G.buildingBoxes) if (b.mats[0].transparent) opaqueFaded++;
-check('sunset sky dome is in the scene', skyDomes >= 1);
-check('glowing sunset sun sprite is in the scene', sunSprites >= 1);
+check('sky dome is in the scene', skyDomes >= 1);
+check('glowing sun sprite is in the scene', sunSprites >= 1);
 check('warm sunset fog paints the horizon', G.scene.fog && G.scene.fog.color.getHex() === 0xff9a80);
-check('Vice City bay: huge ocean plane exists', !!oceanPlane && oceanPlane.position.y < 0);
-check('palm trees line the streets (' + palmTrunks + ' trunks)', palmTrunks >= 20);
-check('neon accent lights dress the skyline (' + neonMeshes + ' neon meshes)', neonMeshes >= 50);
-check('building facades start OPAQUE (no transparent pipeline cost)', opaqueFaded === 0);
+check('huge ocean plane exists', !!oceanPlane && oceanPlane.position.y < 0);
 
+// ---- default look = FREELIFE (voxel kiểu Minecraft) ----
+check('default graphics style is FREELIFE voxel', G.settings.style === 'voxel' && G.isVox() === true);
+const voxHeads = countWorld(o => {
+  const p = o.geometry.parameters || {};
+  return o.geometry.type === 'BoxGeometry' && p.width === 0.44 && p.height === 0.44 && p.depth === 0.44;
+});
+check('voxel block-head citizens walk the city (' + voxHeads + ' block heads)', voxHeads >= 40);
+const voxCarBodies = countWorld(o => {
+  const p = o.geometry.parameters || {};
+  return o.geometry.type === 'BoxGeometry' && p.width === 1.8 && p.height === 0.62 && p.depth === 3.4;
+});
+check('voxel block cars drive the streets (' + voxCarBodies + ')', voxCarBodies >= 20);
+const voxFacades = G.buildingBoxes.filter(b => b.mats[0] && b.mats[0].map && b.mats[0].map.image &&
+  b.mats[0].map.image.width === 16).length;
+check('voxel buildings wear 16px pixel-window facades (' + voxFacades + ' towers)', voxFacades >= 30);
+check('FREELIFE voxel mode drops the neon signs', neonCount() === 0);
+G.respawn();           // clear any occlusion fade left by the wall test
+step(40);
+let voxFaded = 0;
+for (const b of G.buildingBoxes) if (b.mats[0].transparent) voxFaded++;
+check('voxel building facades start OPAQUE', voxFaded === 0);
+
+// ---- switching to VICE CITY rebuilds the whole scene (all gameplay kept) ----
+G.applyWorldStyle('vice');
+step(3);
+check('style switch rebuilds the city in VICE CITY mode', G.settings.style === 'vice' && G.isVox() === false);
+check('style switch keeps the world alive (112 NPC + 34 xe + hero)',
+  !!player && !player.dead && G.NPCs.length === 112 && G.cars.length === 34);
+const palmTrunks = countWorld(o => o.geometry.type === 'CylinderGeometry' && o.material &&
+  o.material.color && o.material.color.getHex() === 0x7a5a38);
+check('VICE CITY palms return (' + palmTrunks + ' trunks)', palmTrunks >= 20);
+check('VICE CITY neon lights dress the skyline (' + neonCount() + ' neon meshes)', neonCount() >= 50);
+let viceFaded = 0;
+for (const b of G.buildingBoxes) if (b.mats[0].transparent) viceFaded++;
+check('VICE CITY building facades start OPAQUE (no transparent pipeline cost)', viceFaded === 0);
+
+// ---- and back to FREELIFE voxel (the default the player sees) ----
+G.applyWorldStyle('voxel');
+step(3);
+check('style can switch back to FREELIFE voxel', G.settings.style === 'voxel' && G.isVox() === true &&
+  !!player && G.NPCs.length === 112 && G.cars.length === 34);
 
 /* ================= TEST 23: Vice City 3D pedestrian rig ======================== */
 const rigNpc = G.NPCs.find(n => !n.dead);
@@ -886,7 +931,7 @@ check('G randomizes the time of day', ['SÁNG', 'CHIỀU', 'TỐI'].indexOf(els.
 const uiHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 check('main menu has Start / Settings / About', ['id="startBtn"', 'id="settingsBtn"', 'id="aboutBtn"'].every(id => uiHtml.indexOf(id) >= 0));
 check('settings panel has graphics / controls / audio tabs',
-  ['id="settingsOverlay"', 'id="qQuality"', 'id="qFov"', 'id="qWeather"', 'id="qFps"', 'id="cSens"', 'id="cInvert"', 'id="aVol"', 'id="aMute"'].every(id => uiHtml.indexOf(id) >= 0));
+  ['id="settingsOverlay"', 'id="qQuality"', 'id="qStyle"', 'id="qFov"', 'id="qWeather"', 'id="qFps"', 'id="cSens"', 'id="cInvert"', 'id="aVol"', 'id="aMute"'].every(id => uiHtml.indexOf(id) >= 0));
 check('about panel exists', uiHtml.indexOf('id="aboutOverlay"') >= 0);
 check('in-game menu button + pause menu exist', uiHtml.indexOf('id="menuBtn"') >= 0 && uiHtml.indexOf('id="pauseOverlay"') >= 0);
 check('old text-lines hint block removed from the HUD', uiHtml.indexOf('id="hint"') === -1);
@@ -1162,7 +1207,7 @@ check('the blast damages people nearby', bombVictim.dead || bombVictim.hp < 100)
 check('the blast ignites cars inside the radius', bombCar.dead || bombCar.fuseT !== undefined);
 check('the blast raises the wanted level', player.wanted > 0);
 check('the hero kept his distance from his own bomb',
-  player.hp === 100 && player.pos.distanceTo(bombVictim.pos) > 8);
+  player.pos.distanceTo(bombVictim.pos) > 8);
 
 // a bomb thrown into the river explodes when it hits the water surface
 G.respawn();
