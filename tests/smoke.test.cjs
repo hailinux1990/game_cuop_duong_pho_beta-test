@@ -665,16 +665,16 @@ check('huge ocean plane exists', !!oceanPlane && oceanPlane.position.y < 0);
 // ---- default look = UNITY CITY (modern PBR) ----
 check('default graphics style is UNITY CITY modern',
   G.settings.style === 'modern' && G.isNeon() === false && G.isVox() === false);
-const sedanBodies = countWorld(o => {
-  const p = o.geometry.parameters || {};
-  return o.geometry.type === 'BoxGeometry' && p.width === 1.92 && p.depth === 4.3;
-});
-check('detailed modern cars drive the streets (' + sedanBodies + ' bodies)', sedanBodies >= 20);
+const sedanBodies = countWorld(o => o.geometry.type === 'ExtrudeGeometry');
+check('cars have bevelled rounded bodies (' + sedanBodies + ' bodies)', sedanBodies >= 34);
 const carRims = countWorld(o => {
   const p = o.geometry.parameters || {};
-  return o.geometry.type === 'CylinderGeometry' && p.radiusTop === 0.2 && p.radiusBottom === 0.2;
+  return o.geometry.type === 'CircleGeometry' && p.radius === 0.2;
 });
-check('cars ride on chrome rims (' + carRims + ' rims)', carRims >= 80);
+check('cars ride on alloy spoke rims (' + carRims + ' discs)', carRims >= 80);
+const treadTires = countWorld(o => o.geometry.type === 'CylinderGeometry' && o.material && o.material.map &&
+  o.material.map.image && o.material.map.image.height === 32);
+check('tires wear tread textures (' + treadTires + ')', treadTires >= 100);
 const facades128 = G.buildingBoxes.filter(b => b.mats[0] && b.mats[0].map && b.mats[0].map.image &&
   b.mats[0].map.image.width === 128).length;
 check('buildings wear 128px window facades (' + facades128 + ' towers)', facades128 >= 30);
@@ -732,14 +732,14 @@ G.NPCs.forEach(n => {
     const gp = p.geometry && p.geometry.parameters;
     if (!gp) return;
     if (gp.width === 0.32 && gp.height === 0.085) rigGlasses++;
-    if (gp.width === 0.34 && gp.height === 0.42) rigLong++;
+    if (gp.width === 0.32 && gp.height === 0.42) rigLong++;
   });
 });
 check('street crowd wears sunglasses (' + rigGlasses + ')', rigGlasses >= 5);
 check('police and civilians wear caps (' + rigCaps + ')', rigCaps >= 10);
 check('long-haired pedestrians exist (' + rigLong + ')', rigLong >= 5);
 const heroEyes = G.player.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
-  p.geometry.parameters.width === 0.075 && p.geometry.parameters.height === 0.048).length;
+  p.geometry.parameters.width === 0.078 && p.geometry.parameters.height === 0.05).length;
 check('hero has a detailed 3D face (2 eyes)', heroEyes >= 2);
 check('hero wears a patterned tropical shirt', !!(G.player.group.userData.body.material.map));
 let rigPrints = 0;
@@ -1260,6 +1260,71 @@ check('the hero is still standing dry on the shore',
   player.swimming === false && G.swimWaterAt(player.pos.x, player.pos.z) === null && player.hp > 0);
 G.respawn();
 player.armor = 0;
+
+/* ================= TEST 33: realistic models (shark, city, waves, skin) ========= */
+const shark0 = G.sharks[0];
+G.scene.updateMatrixWorld(true);
+const sharkBB = new THREE.Box3().setFromObject(shark0.group);
+check('shark is a streamlined predator (~' + (sharkBB.max.z - sharkBB.min.z).toFixed(1) + ' m long)',
+  sharkBB.max.z - sharkBB.min.z > 3.5);
+const sharkParts = shark0.group.children.length;
+check('shark is built from ' + sharkParts + ' detailed parts (fins/gills/eyes)', sharkParts >= 12);
+check('shark wags a separate tail group', !!shark0.group.userData.tail);
+const sharkMeshes = [];
+shark0.group.traverse(o => { if (o.isMesh) sharkMeshes.push(o); });
+const whiteBelly = sharkMeshes.some(m => m.material && m.material.color && m.material.color.getHex() === 0xd8dde0);
+check('shark has a white belly (countershading)', whiteBelly);
+G.setTimeOfDay('afternoon'); G.setWeather('clear'); step(2);
+const waveY0 = [];
+G.scene.traverse(o => {
+  if (o.isMesh && o.geometry && o.geometry.type === 'PlaneGeometry' && o.geometry.parameters &&
+    o.geometry.parameters.width >= 2000 && o.material && o.material.map &&
+    o.material.map.image && o.material.map.image.height === 256) {
+    const pos = o.geometry.attributes.position;
+    waveY0.push(pos.getY(120));
+  }
+});
+step(40);
+let waveMoved = false;
+G.scene.traverse(o => {
+  if (o.isMesh && o.geometry && o.geometry.type === 'PlaneGeometry' && o.geometry.parameters &&
+    o.geometry.parameters.width >= 2000) {
+    const pos = o.geometry.attributes.position;
+    if (Math.abs(pos.getY(120) - waveY0[0]) > 0.01) waveMoved = true;
+  }
+});
+check('ocean surface rolls with animated waves', waveMoved);
+let brickF = 0, asphaltR = 0, grassL = 0;
+G.buildingBoxes.forEach(b => {
+  const m = b.mats[0] && b.mats[0].map && b.mats[0].map.image;
+  if (m && m.height === 128) {
+    // brick textures carry the mortar pattern: count via cache keys is not exposed,
+    // so sample the canvas pixel data through the game scene instead
+  }
+});
+G.scene.traverse(o => {
+  if (!o.isMesh || !o.material || !o.material.map || !o.material.map.image) return;
+  const img = o.material.map.image;
+  if (img.height === 128 && img.width === 128) {
+    // asphalt = 128x128 with a repeating wrap flag; brick = same size.
+    // distinguish by wrap repeat: roads have big repeat counts
+    if (o.material.map.repeat && o.material.map.repeat.x > 10) asphaltR++;
+    if (o.material.map.repeat && o.material.map.repeat.x === 3) grassL++;
+  }
+});
+check('roads are paved with asphalt texture', asphaltR >= 20);
+check('park lawns grow textured grass', grassL >= 3);
+const npc0 = G.NPCs.find(n => !n.dead && !n.swim) || G.dispatchCopNear(player.pos.x, player.pos.z + 8);
+const skinParts = npc0.group.userData.parts.filter(p => p.material && p.material.map &&
+  p.material.map.image && p.material.map.image.width === 64);
+check('pedestrians have shaded skin textures (' + skinParts.length + ' skin parts)', skinParts.length >= 4);
+const irisCount = npc0.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
+  p.geometry.parameters.width === 0.026 && p.geometry.parameters.height === 0.036).length;
+check('pedestrians have coloured irises (' + irisCount + ')', irisCount >= 2);
+const soleCount = npc0.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
+  p.geometry.parameters.width === 0.2 && p.geometry.parameters.height === 0.035).length;
+check('sneakers have white soles (' + soleCount + ')', soleCount >= 2);
+const waveMeshCount = G.scene.children.reduce((n, c) => n, 0);
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

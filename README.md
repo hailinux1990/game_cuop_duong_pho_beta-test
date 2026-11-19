@@ -4,7 +4,21 @@
 ▶ Chơi ngay: mở `index.html` trực tiếp, hoặc `python3 -m http.server 8123` rồi truy cập http://127.0.0.1:8123/ (bật WebGL + tăng tốc phần cứng).
 
 ## 🎨 Bản đại tu đồ họa kiểu UNITY 3D (thay đổi TOÀN BỘ cảnh game)
-Toàn bộ môi trường, nhân vật và phương tiện đã được xây lại từ đầu với pipeline đồ họa hiện đại — **gameplay giữ nguyên 100%**.
+Toàn bộ môi trường, nhân vật và phương tiện đã được xây lại từ đầu với pipeline đồ họa hiện đại — **gameplay giữ nguyên 100%**. Đợt nâng cấp 2 đẩy độ chân thực lên cao: **người thật, xe thật, cá mập thật, thành phố vật liệu thật**.
+
+### 🧍 NGƯỜI THẬT (đợt nâng cấp 2)
+- **Da có texture** (đốm sáng/tối mịn) mọi tông da; **tay áo + cẳng tay trần** như người thật; **mắt có tròng màu** (nâu/xanh dương/xanh lá) + lòng đen; lông mày theo màu tóc
+- **Quần áo vải dệt**: áo có nếp gấp + sợi dệt (cloth), quần **denim vân chéo**, áo in hoa nhiệt đới / sọc / kẻ plaid; giày thể thao có **đế trắng**
+- Mũ cảnh sát có băng đen + phù hiệu vàng, bao súng + túi đựng; tóc búi; tai; xương hàm
+### 🚗 XE CỘ THẬT
+- Thân xe **bo tròn bằng ExtrudeGeometry** (vát cạnh), **vòm chắn bùn 4 bánh**, capo/cốp dốc, kính lái **ngả sau**, kính hông, kính hậu, **kính phản chiếu**, gương trên trụ, ăng-ten, ống xả
+- **Lốp có vân hoa lốp** (texture), **mâm hợp kim 5 căm**, đèn pha tròn phát sáng, đèn hậu đỏ, lưới tản nhiệt + viền crôm
+### 🦈 CÁ MẬP THẬT
+- Dáng **cá mập trắng lớn**: thân thủy động + mõm nhọn + cuống đuôi, **vây lưng cong vút**, vây lưng sau, **vây ngực/bụng/hậu môn**, **đuôi lưỡi liềm** vẫy khi bơi, **khe mang**, mắt, miệng, **bụng trắng** (countershading)
+### 🏙️ THÀNH PHỐ THẬT
+- Mặt dựng **gạch xây** (khu đông bắc) / **bê tông có vết ố + mạch panel** (các khu còn lại); **cửa sổ có rèm** khi lên đèn; biển hiệu cửa hàng có **chữ đọc được** (HOTEL, CAFE, 24H, SHOP, BAR, FOOD)
+- Đường **nhựa asphalt** có vết nứt + vá, vỉa hè **khe co giãn**, **cỏ có ngọn lá**, **cát có hạt**, mái nhà **sỏi**
+- **Nước có sóng lăn thật** (vertex waves) trên biển + sông, kèm texture sóng cuộn
 
 | Hạng mục | Nội dung mới |
 |---|---|
@@ -29,13 +43,13 @@ Chuyển phong cách bất cứ lúc nào — cả thế giới dựng lại, **
 - **index.html** — giao diện: MENU chính (BẮT ĐẦU · CÀI ĐẶT · GIỚI THIỆU), menu tạm dừng; HUD máu/giáp, sao truy nã, vũ khí 5 slot, đạn, minimap, đồng hồ GMT+7 + nhãn SÁNG/CHIỀU/TỐI + thời tiết, đồng hồ tốc độ khi lái xe, WASTED, bảng lệnh cheat (phím ~)
 - **js/game.js** — toàn bộ logic + đồ họa (thuần Three.js r128, ~5.600 dòng, không tài nguyên ngoài)
 - **lib/three.min.js** — engine Three.js r128 (bản local)
-- **tests/smoke.test.cjs** — 252 test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
+- **tests/smoke.test.cjs** — 263 test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
 - **tests/browser-smoke.html** — harness kiểm tra game trong trình duyệt thật (stub WebGL)
 - **tests/mesh_count.cjs** — đếm mesh/vertex/material để kiểm soát hiệu năng
 
 ## Kiểm chứng
 - `node --check js/game.js` — cú pháp hợp lệ
-- `node tests/smoke.test.cjs` — **252/252 PASS**, gồm toàn bộ gameplay cũ (map 11×11, 112 NPC, 34 xe, súng/bom/cheat/truy nã/cầu/thuyền/cá mập/thời tiết/giờ/menu…) **và đồ họa mới**: sky dome + sun sprite + fog ban ngày `0xbfd0de`, ocean ≥2000 m, 128px facade + emissiveMap về đêm, tháp kính, xe 1.92×4.3 + mâm crôm, rig người ≥20 mảnh (mắt 0.075, kính râm, mũ, tóc dài), đổi phong cách **modern ↔ neon** giữ nguyên 112 NPC + 34 xe, neon có ≥50 biển hiệu + ≥20 thân cọ, fog hoàng hôn `0xff9a80` ở neon, fog đêm `0x0a0e1c`, bóng đổ bám theo người chơi
+- `node tests/smoke.test.cjs` — **263/263 PASS**, gồm toàn bộ gameplay cũ (map 11×11, 112 NPC, 34 xe, súng/bom/cheat/truy nã/cầu/thuyền/cá mập/thời tiết/giờ/menu…) **và đồ họa mới**: sky dome + sun sprite + fog ban ngày `0xbfd0de`, ocean ≥2000 m với **sóng vertex**, 128px facade + emissiveMap về đêm + **gạch/bê tông**, tháp kính, **xe thân bo tròn ExtrudeGeometry + mâm 5 căm + lốp vân**, **cá mập trắng lớn đủ vây/mang/bụng trắng**, rig người ≥20 mảnh (mắt có tròng màu, da texture, kính râm, mũ, tóc dài), đổi phong cách **modern ↔ neon** giữ nguyên 112 NPC + 34 xe, neon có ≥50 biển hiệu + ≥20 thân cọ, fog hoàng hôn `0xff9a80` ở neon, fog đêm `0x0a0e1c`, bóng đổ bám theo người chơi
 - Container không có GPU/WebGL nên không chụp ảnh render thật — mở link để xem trực tiếp.
 
 ## Điều khiển (giữ nguyên)
