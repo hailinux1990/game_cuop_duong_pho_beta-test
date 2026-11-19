@@ -1196,6 +1196,7 @@ G.setWeather('clear');
 step(2);
 G.respawn();
 player.hp = 100; player.armor = 0; player.wanted = 0;
+G.NPCs.forEach(n => { if (n.type === 'police') { n.pos.set(400, 0, 400); n.group.position.copy(n.pos); } });
 
 let bombVictim = G.NPCs.find(n => !n.dead && !n.swim && n.type === 'civilian')
   || G.NPCs.find(n => !n.dead && !n.swim)
@@ -1213,6 +1214,11 @@ bombCar.curSpeed = 0; bombCar.heading = 0; bombCar.laneOffset = 0; bombCar.fuseT
 bombCar.pos.set(player.pos.x + 1.5, 0, player.pos.z + 13.5);
 bombCar.prevPos.copy(bombCar.pos);
 bombCar.group.position.copy(bombCar.pos);
+G.cars.forEach(c => {
+  if (c === bombCar || c.dead) return;
+  c.driver = null; c.curSpeed = 0; c.laneOffset = 0;
+  c.pos.set(420, 0, 420); c.prevPos.copy(c.pos); c.group.position.copy(c.pos);
+});
 
 // select the bomb (key 5) and check the HUD
 key('Digit5'); step(20);
@@ -1222,6 +1228,7 @@ check('BOM shows its grenade icon in the HUD',
 check('hero carries 6 bombs to start', player.ammoStore[4] === 6);
 
 aimCameraAtGround(player.pos.z + 12);
+const blastAnchor = new THREE.Vector3(player.pos.x, 0, player.pos.z + 12);
 const bombsBefore = G.bombs.length;
 handlers.mousedown({ button: 0 }); step(2); handlers.mouseup({ button: 0 });
 check('clicking throws a bomb into the world', G.bombs.length === bombsBefore + 1 && player.ammoStore[4] === 5);
@@ -1232,7 +1239,7 @@ check('the blast damages people nearby', bombVictim.dead || bombVictim.hp < 100)
 check('the blast ignites cars inside the radius', bombCar.dead || bombCar.fuseT !== undefined);
 check('the blast raises the wanted level', player.wanted > 0);
 check('the hero kept his distance from his own bomb',
-  player.pos.distanceTo(bombVictim.pos) > 8);
+  player.pos.distanceTo(blastAnchor) > 8 && player.hp === 100);
 
 // a bomb thrown into the river explodes when it hits the water surface
 G.respawn();
@@ -1263,6 +1270,9 @@ player.armor = 0;
 
 /* ================= TEST 33: realistic models (shark, city, waves, skin) ========= */
 const shark0 = G.sharks[0];
+// measure the model at a neutral heading (fin projections change the box with yaw)
+shark0.group.rotation.y = 0;
+shark0.group.userData.tail.rotation.y = 0;
 G.scene.updateMatrixWorld(true);
 const sharkBB = new THREE.Box3().setFromObject(shark0.group);
 check('shark is a streamlined predator (~' + (sharkBB.max.z - sharkBB.min.z).toFixed(1) + ' m long)',
@@ -1325,6 +1335,73 @@ const soleCount = npc0.group.userData.parts.filter(p => p.geometry && p.geometry
   p.geometry.parameters.width === 0.2 && p.geometry.parameters.height === 0.035).length;
 check('sneakers have white soles (' + soleCount + ')', soleCount >= 2);
 const waveMeshCount = G.scene.children.reduce((n, c) => n, 0);
+
+/* ================= TEST 34: living faces — moods, tears, bubbles, suits ======== */
+G.respawn();
+// fresh pedestrians for the mood checks (old crowd may have been run over by traffic)
+const mkMood = (mood) => {
+  let n = null;
+  for (let i = 0; i < 8 && !n; i++) {
+    const c = G.makeNPC('civilian');
+    if (c.group.userData.faceRig && c.group.userData.faceRig.eyes.length >= 4) n = c;
+  }
+  if (!n) n = G.makeNPC('civilian');
+  n.pos.set(player.pos.x + 8, 0, player.pos.z + 8);
+  while (G.isInsideBuilding(n.pos.x, n.pos.z)) { n.pos.x += 2; n.pos.z += 2; }
+  n.group.position.copy(n.pos);
+  if (mood) n.mood = mood;
+  return n;
+};
+const moodCounts = {};
+G.NPCs.forEach(n => { moodCounts[n.mood] = (moodCounts[n.mood] || 0) + 1; });
+check('street NPCs carry moods (' + JSON.stringify(moodCounts) + ')',
+  (moodCounts.happy || 0) >= 10 && (moodCounts.talk || 0) >= 10 && (moodCounts.cry || 0) >= 2);
+const faceNpc = mkMood('happy');
+check('NPC faces are mood-rigged (mouth + eyes + tears)',
+  !!faceNpc.group.userData.faceRig && !!faceNpc.group.userData.faceRig.mouth &&
+  faceNpc.group.userData.faceRig.eyes.length >= 4 && faceNpc.group.userData.faceRig.tears.length === 2);
+// crying NPC: tears flow
+const cryer = mkMood('cry');
+step(30);
+const tearsOn = cryer.group.userData.faceRig.tears.filter(t => t.visible).length;
+check('the crying pedestrian sheds visible tears (' + tearsOn + '/2)', tearsOn >= 1);
+// happy mouth smiles wide
+const happy = mkMood('happy');
+step(2);
+check('the happy pedestrian smiles (mouth x' + happy.group.userData.faceRig.mouth.scale.x.toFixed(2) + ')',
+  happy.group.userData.faceRig.mouth.scale.x > 1.3);
+// talking mouth moves
+const talker = mkMood('talk');
+step(12);
+const mh0 = talker.group.userData.faceRig.mouth.scale.y;
+step(20);
+const mh1 = talker.group.userData.faceRig.mouth.scale.y;
+check('the talking pedestrian moves their lips', Math.abs(mh1 - mh0) > 0.02);
+// emoji bubble pops over a laughing NPC
+const laugher = mkMood('laugh');
+laugher.pos.set(player.pos.x + 6, 0, player.pos.z + 6);
+laugher.group.position.copy(laugher.pos);
+laugher.bubbleT = 0;
+step(4);
+check('the laughing pedestrian pops a 😂 bubble', !!laugher.bubble && laugher.bubble.visible === true &&
+  !!laugher.bubble.material.map);
+// suits in the crowd
+const suited = G.makeHuman({ suit: true, shirt: 0x2a2f38, pants: 0x26262e, tieColor: 0x8a1a2a });
+let ties = 0;
+suited.userData.parts.forEach(p => {
+  const gp = p.geometry && p.geometry.parameters;
+  if (gp && gp.width === 0.06 && gp.height === 0.22) ties++;
+});
+check('sharp-dressed civilians wear suit ties (' + ties + ')', ties >= 1);
+// city lights glow after dark (billboards + windows + lamps)
+G.setTimeOfDay('night'); G.setWeather('clear'); step(2);
+let glowSurfaces = 0;
+G.scene.traverse(o => {
+  if (!o.isMesh || !o.material || !o.material.emissive) return;
+  if (o.material.emissiveIntensity > 0.1) glowSurfaces++;
+});
+check('city lights glow after dark (' + glowSurfaces + ' emissive surfaces)', glowSurfaces >= 5);
+G.setTimeOfDay('afternoon'); step(2);
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

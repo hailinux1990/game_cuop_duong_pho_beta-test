@@ -34,6 +34,11 @@ Toàn bộ môi trường, nhân vật và phương tiện đã được xây l�
 | 🛥️ Phương tiện sông | Thuyền máy: mũi nhọn, boong, cabin kính, lan can, máy đuôi — chạy 2 chiều dưới cầu |
 | 🗺️ Minimap | Tự đổi màu theo phong cách đồ họa đang chọn |
 
+### 🎭 NPC SỐNG ĐỘNG KIỂU GANGSTAR VEGAS (đợt nâng cấp 3)
+- Mỗi người đi đường có **tâm trạng riêng**: bình thản, vui vẻ (cười tươi), **nói chuyện (miệng cử động)** , **cười lớn (ngửa đầu)** , **khóc (nước mắt chảy xuống má + vai run nức nở)** , tức giận (cau mày), sợ hãi (mắt mở to khi bị thương/chạy trốn)
+- **Bong bóng cảm xúc emoji** 😊💬😂😭😠😱 nổi trên đầu người gần bạn + âm thanh cười/khóc cảnh cáo
+- Dân công sở **mặc vest + cà vạt**, cảnh sát đội mũ băng đen + phù hiệu; **biển quảng cáo phát sáng về đêm** như đại lộ Vegas
+
 ## 🎭 2 phong cách đồ họa (Cài đặt → Phong cách đồ họa)
 - **UNITY CITY (hiện đại)** — mặc định: thành phố bê tông/kính ban ngày xanh trong, cây xanh, ánh sáng tự nhiên.
 - **VICE CITY (neon)** — hoàng hôn cam-hồng, nhà pastel, **biển hiệu neon phát sáng** trên phố và nóc nhà chọc trời, hàng cọ bãi biển.
@@ -43,13 +48,13 @@ Chuyển phong cách bất cứ lúc nào — cả thế giới dựng lại, **
 - **index.html** — giao diện: MENU chính (BẮT ĐẦU · CÀI ĐẶT · GIỚI THIỆU), menu tạm dừng; HUD máu/giáp, sao truy nã, vũ khí 5 slot, đạn, minimap, đồng hồ GMT+7 + nhãn SÁNG/CHIỀU/TỐI + thời tiết, đồng hồ tốc độ khi lái xe, WASTED, bảng lệnh cheat (phím ~)
 - **js/game.js** — toàn bộ logic + đồ họa (thuần Three.js r128, ~5.600 dòng, không tài nguyên ngoài)
 - **lib/three.min.js** — engine Three.js r128 (bản local)
-- **tests/smoke.test.cjs** — 263 test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
+- **tests/smoke.test.cjs** — 271 test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
 - **tests/browser-smoke.html** — harness kiểm tra game trong trình duyệt thật (stub WebGL)
 - **tests/mesh_count.cjs** — đếm mesh/vertex/material để kiểm soát hiệu năng
 
 ## Kiểm chứng
 - `node --check js/game.js` — cú pháp hợp lệ
-- `node tests/smoke.test.cjs` — **263/263 PASS**, gồm toàn bộ gameplay cũ (map 11×11, 112 NPC, 34 xe, súng/bom/cheat/truy nã/cầu/thuyền/cá mập/thời tiết/giờ/menu…) **và đồ họa mới**: sky dome + sun sprite + fog ban ngày `0xbfd0de`, ocean ≥2000 m với **sóng vertex**, 128px facade + emissiveMap về đêm + **gạch/bê tông**, tháp kính, **xe thân bo tròn ExtrudeGeometry + mâm 5 căm + lốp vân**, **cá mập trắng lớn đủ vây/mang/bụng trắng**, rig người ≥20 mảnh (mắt có tròng màu, da texture, kính râm, mũ, tóc dài), đổi phong cách **modern ↔ neon** giữ nguyên 112 NPC + 34 xe, neon có ≥50 biển hiệu + ≥20 thân cọ, fog hoàng hôn `0xff9a80` ở neon, fog đêm `0x0a0e1c`, bóng đổ bám theo người chơi
+- `node tests/smoke.test.cjs` — **271/271 PASS**, gồm toàn bộ gameplay cũ (map 11×11, 112 NPC, 34 xe, súng/bom/cheat/truy nã/cầu/thuyền/cá mập/thời tiết/giờ/menu…) **và đồ họa mới**: sky dome + sun sprite + fog ban ngày `0xbfd0de`, ocean ≥2000 m với **sóng vertex**, 128px facade + emissiveMap về đêm + **gạch/bê tông**, tháp kính, **xe thân bo tròn ExtrudeGeometry + mâm 5 căm + lốp vân**, **cá mập trắng lớn đủ vây/mang/bụng trắng**, rig người ≥20 mảnh (mắt có tròng màu, da texture, kính râm, mũ, tóc dài), đổi phong cách **modern ↔ neon** giữ nguyên 112 NPC + 34 xe, neon có ≥50 biển hiệu + ≥20 thân cọ, fog hoàng hôn `0xff9a80` ở neon, fog đêm `0x0a0e1c`, bóng đổ bám theo người chơi; **NPC biểu cảm**: mood đa dạng, nước mắt người khóc, miệng cử động khi nói, bong bóng 😂, vest cà vạt, đèn quảng cáo đêm
 - Container không có GPU/WebGL nên không chụp ảnh render thật — mở link để xem trực tiếp.
 
 ## Điều khiển (giữ nguyên)

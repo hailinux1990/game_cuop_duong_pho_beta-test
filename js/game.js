@@ -253,6 +253,13 @@
       this.rainNode.gain.setTargetAtTime(lv * 0.12, this.ctx.currentTime, 0.5);
     },
     warn() { this.tone(880, 0.12, 'square', 0.18); setTimeout(() => this.tone(660, 0.14, 'square', 0.18), 140); },
+    laugh() {
+      for (let i = 0; i < 4; i++) setTimeout(() => this.tone(340 + Math.random() * 200, 0.1, 'square', 0.05, 190), i * 140);
+    },
+    sob() {
+      this.tone(215, 0.26, 'sine', 0.07, 150);
+      setTimeout(() => this.tone(235, 0.3, 'sine', 0.06, 160), 270);
+    },
 
     /* ---- ambient city soundscape ---- */
     ambientOn: false,
@@ -1587,7 +1594,8 @@
     g2.font = 'bold 26px sans-serif';
     g2.fillText('CITY', 30, 42);
     const tex = new THREE.CanvasTexture(c);
-    const adMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5 });
+    const adMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0 });
+    lampBulbs.push(adMat);           // billboard backlight joins the city night glow
     const panel = new THREE.Mesh(new THREE.BoxGeometry(4.6, 2.4, 0.24),
       [mat(0x2a2e33), mat(0x2a2e33), mat(0x2a2e33), mat(0x2a2e33), adMat, adMat]);
     panel.position.y = 5.2;
@@ -2358,8 +2366,14 @@
     const pelvis = M(G_PELVIS(), pantsM); pelvis.position.set(0, 0.92, 0); pelvis.scale.x = female ? 0.94 : 1;
     const belt = M(G_BELT(), mat(opt.belt || 0x24242a, { roughness: 0.6 })); belt.position.set(0, 1.03, 0);
     const torso = M(G_TORSO(), shirtM); torso.position.set(0, 1.29, 0); torso.scale.x = female ? 0.9 : 1;
-    const collar = M(new THREE.BoxGeometry(0.3, 0.09, 0.22), shirtM); collar.position.set(0, 1.56, 0);
+    const collar = M(new THREE.BoxGeometry(0.3, 0.09, 0.22), opt.suit ? whiteM : shirtM); collar.position.set(0, 1.56, 0);
     add(pelvis); add(belt); add(torso); add(collar);
+    if (opt.suit) {
+      // suit jacket: white shirt collar + tie
+      const tie = M(new THREE.BoxGeometry(0.06, 0.22, 0.02), mat(opt.tieColor || 0x8a1a2a, { roughness: 0.5 }));
+      tie.position.set(0, 1.3, 0.185);
+      add(tie);
+    }
     pelvis.castShadow = true; torso.castShadow = true;
     let skirtMesh = null;
     if (skirt) {
@@ -2380,9 +2394,10 @@
     const earL = M(G_EAR(), skinM); earL.position.set(-0.175, 1.77, 0); add(earL);
     const earR = M(G_EAR(), skinM); earR.position.set(0.175, 1.77, 0); add(earR);
 
-    // face: whites + coloured iris + pupil + brows + nose + mouth
+    // face: whites + coloured iris + pupil + brows + nose + mouth — all mood-rigged
     const faceZ = 0.17;
-    const addEyes = (face) => {
+    const faceRig = { mouth: null, browL: null, browR: null, eyes: [], tears: [], glasses: null };
+    const addEyes = () => {
       const eWL = M(G_EYEWHITE(), whiteM); eWL.position.set(-0.062, 1.8, faceZ - 0.004);
       const eWR = eWL.clone(); eWR.position.x = 0.062;
       const iL = M(G_IRIS(), irisM); iL.position.set(-0.062, 1.8, faceZ + 0.006);
@@ -2393,18 +2408,31 @@
       const bR = bL.clone(); bR.position.x = 0.062;
       add(eWL); add(eWR); add(iL); add(iR); add(pL); add(pR); add(bL); add(bR);
       [eWL, eWR, iL, iR, pL, pR, bL, bR].forEach(m => { m.userData.head = true; });
-      if (face) head.castShadow = true;
+      faceRig.browL = bL; faceRig.browR = bR;
+      faceRig.eyes.push(eWL, eWR, iL, iR, pL, pR);
+      head.castShadow = true;
     };
     if (opt.face) {
-      addEyes(true);
+      addEyes();
     } else if (opt.sunglasses) {
       const glasses = M(G_SUNGLASSES(), eyeM); glasses.position.set(0, 1.8, faceZ + 0.01);
       add(glasses); glasses.userData.head = true;
+      faceRig.glasses = glasses;
     } else {
-      addEyes(false);
+      addEyes();
     }
     const nose = M(G_NOSE(), skinM); nose.position.set(0, 1.74, faceZ + 0.02); add(nose); nose.userData.head = true;
     const mouth = M(G_MOUTH(), detailM); mouth.position.set(0, 1.665, faceZ + 0.004); add(mouth); mouth.userData.head = true;
+    faceRig.mouth = mouth;
+    // tears (hidden until the NPC cries)
+    const tearMat = mat(0x9fd8ff, { roughness: 0.15 });
+    tearMat.transparent = true;
+    const tearL = M(new THREE.BoxGeometry(0.02, 0.06, 0.012), tearMat); tearL.position.set(-0.062, 1.78, faceZ + 0.022); tearL.visible = false;
+    const tearR = tearL.clone(); tearR.position.x = 0.062;
+    add(tearL); add(tearR);
+    tearL.userData.head = true; tearR.userData.head = true;
+    faceRig.tears.push(tearL, tearR);
+    g.userData.faceRig = faceRig;
 
     // hair styles / hats
     let hair = null;
@@ -2478,7 +2506,8 @@
 
     g.userData = {
       body: torso, head, hair, legL, legR, armL, armR, shoeL, shoeR, handL, handR,
-      pelvis, belt, neck, jaw, skirt: skirtMesh, parts
+      pelvis, belt, neck, jaw, skirt: skirtMesh, parts,
+      faceRig
     };
     return g;
   }
@@ -2967,6 +2996,11 @@
         opt.skirt = true;
         opt.skirtColor = [0xff6f91, 0x40e0d0, 0xffd166, 0x9b7bff, 0xf3f0e4, 0x2b3140][(rng() * 6) | 0];
       }
+      if (rng() < 0.15) {          // sharp-dressed civilians: suit + tie
+        opt.suit = true;
+        opt.shirt = [0x2a2f38, 0x3a3f4a, 0x26262e, 0x4a4038][(rng() * 4) | 0];
+        opt.tieColor = [0x8a1a2a, 0x1a3a6a, 0xc2a02e][(rng() * 3) | 0];
+      }
     }
     const g = makeHuman(opt);
     const start = isPolice ? randomRoadNode() : randomWalkablePoint();
@@ -2980,7 +3014,9 @@
       target: null, wanderTimer: 0, speed: isPolice ? 3.4 : 1.9,
       dead: false, deathT: 0, fleeDir: new THREE.Vector3(),
       path: [], pathI: 0, shootCd: rng() * 1.2, losTimer: 0, los: true,
-      anim: 0, facing: 0, runSpeed: 5.2
+      anim: 0, facing: 0, runSpeed: 5.2,
+      mood: isPolice ? (rng() < 0.5 ? 'angry' : 'calm') : rollMood(),
+      moodAnim: 0, bubbleT: 2 + rng() * 4, hideT: 0, bubble: null
     };
     g.userData.owner = npc;
     g.userData.parts.forEach(p => p.userData.owner = npc);
@@ -2988,6 +3024,140 @@
     NPCs.push(npc);
     npc.group.userData.parts.forEach(p => hittables.push(p));
     return npc;
+  }
+
+  /* ---------------- NPC moods & living faces (Gangstar-style streets) ---------------- */
+  const MOOD_EMOJI = { happy: '😊', talk: '💬', laugh: '😂', cry: '😭', angry: '😠', fear: '😱' };
+  function rollMood() {
+    const r = rng();
+    if (r < 0.4) return 'calm';
+    if (r < 0.6) return 'happy';
+    if (r < 0.8) return 'talk';
+    if (r < 0.86) return 'laugh';
+    if (r < 0.94) return 'angry';
+    return 'cry';
+  }
+  const _bubbleTex = {};
+  function bubbleTexture(emoji) {
+    if (_bubbleTex[emoji]) return _bubbleTex[emoji];
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = '#ffffff';
+    g.beginPath();
+    g.arc(32, 28, 23, 0, Math.PI * 2);
+    g.fill();
+    g.beginPath();
+    g.moveTo(22, 47); g.lineTo(42, 47); g.lineTo(26, 61);
+    g.closePath();
+    g.fill();
+    g.font = '30px serif';
+    g.textAlign = 'center';
+    g.fillText(emoji, 32, 38);
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    _bubbleTex[emoji] = tex;
+    return tex;
+  }
+  // animate the face: smile / talk (moving lips) / laugh / cry (tears + sobbing) / anger / fear
+  function updateFace(npc, dt) {
+    const rig = npc.group.userData.faceRig;
+    if (!rig || !rig.mouth) return;
+    npc.moodAnim = (npc.moodAnim || 0) + dt;
+    const a = npc.moodAnim;
+    let mood = npc.mood || 'calm';
+    if (npc.state === 'flee' || (npc.fleeT || 0) > 0) mood = 'fear';
+    if (npc.hp < npc.maxHp && mood !== 'fear') mood = 'fear';          // hurt -> scared
+    const m = rig.mouth;
+    m.rotation.x = 0; m.rotation.z = 0; m.scale.set(1, 1, 1); m.position.y = 1.665;
+    if (rig.browL) {
+      rig.browL.position.y = 1.848; rig.browR.position.y = 1.848;
+      rig.browL.rotation.z = 0; rig.browR.rotation.z = 0;
+    }
+    rig.eyes.forEach(e => {
+      if (e.userData._baseScale === undefined) e.userData._baseScale = e.scale.x || 1;
+      e.scale.setScalar(e.userData._baseScale);
+    });
+    const u = npc.group.userData;
+    if (u.head) { u.head.rotation.x = 0; u.head.rotation.z = 0; }
+    switch (mood) {
+      case 'happy':
+        m.scale.set(1.55, 0.75, 1); m.position.y = 1.672;
+        if (rig.browL) { rig.browL.position.y = 1.85; rig.browR.position.y = 1.85; }
+        break;
+      case 'laugh':
+        m.scale.set(1.3, 1.5 + Math.sin(a * 4.2) * 0.55, 1); m.position.y = 1.667;
+        if (rig.browL) { rig.browL.position.y = 1.856; rig.browR.position.y = 1.856; }
+        if (u.head) u.head.rotation.z = Math.sin(a * 2.1) * 0.12;
+        break;
+      case 'talk':
+        m.scale.set(1.1, 0.65 + Math.abs(Math.sin(a * 3.4)) * 0.95, 1); m.position.y = 1.668;
+        if (rig.browL) {
+          rig.browL.position.y = 1.85 + Math.sin(a * 3.4) * 0.01;
+          rig.browR.position.y = 1.85 + Math.sin(a * 3.4 + 0.6) * 0.01;
+        }
+        break;
+      case 'cry':
+        m.scale.set(1.25, 0.7, 1); m.rotation.x = 0.55; m.position.y = 1.662;
+        if (rig.browL) { rig.browL.rotation.z = 0.42; rig.browR.rotation.z = -0.42; }
+        if (u.head) u.head.rotation.x = 0.3;
+        npc.group.rotation.z = Math.sin(a * 6.5) * 0.045;               // sobbing shoulders
+        break;
+      case 'angry':
+        m.scale.set(0.75, 0.85, 1); m.position.y = 1.666;
+        if (rig.browL) {
+          rig.browL.rotation.z = -0.38; rig.browR.rotation.z = 0.38;
+          rig.browL.position.y = 1.842; rig.browR.position.y = 1.842;
+        }
+        break;
+      case 'fear':
+        if (rig.browL) { rig.browL.position.y = 1.858; rig.browR.position.y = 1.858; }
+        m.scale.set(1.05, 1.25, 1); m.position.y = 1.664;
+        rig.eyes.forEach(e => e.scale.setScalar((e.userData._baseScale || 1) * 1.3));
+        break;
+      default: break;
+    }
+    // tears drip down crying cheeks
+    if (rig.tears.length) {
+      const crying = mood === 'cry';
+      rig.tears.forEach((t, i) => {
+        if (!crying) { t.visible = false; return; }
+        t.visible = true;
+        const cyc = (a * 0.85 + i * 0.55) % 1.5;
+        t.position.y = 1.79 - cyc * 0.16;
+        t.material.opacity = Math.max(0, 1 - cyc * 1.3);
+      });
+    }
+    // emoji speech bubble above the head (only for nearby NPCs)
+    npc.bubbleT = (npc.bubbleT === undefined ? 2 + rng() * 4 : npc.bubbleT) - dt;
+    if (!npc.bubble) {
+      npc.bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: null, transparent: true, depthWrite: false }));
+      npc.bubble.scale.set(0.85, 0.85, 1);
+      npc.bubble.visible = false;
+      scene.add(npc.bubble);
+    }
+    npc.bubble.position.set(npc.pos.x, 2.62, npc.pos.z);
+    if (npc.bubble.visible) {
+      npc.hideT -= dt;
+      if (npc.hideT <= 0) npc.bubble.visible = false;
+    }
+    const emoji = MOOD_EMOJI[mood];
+    if (emoji && npc.bubbleT <= 0) {
+      const near = player && !player.dead && npc.pos.distanceTo(player.pos) < 24;
+      if (near && !npc.dead) {
+        npc.bubble.material.map = bubbleTexture(emoji);
+        npc.bubble.material.needsUpdate = true;
+        npc.bubble.visible = true;
+        npc.hideT = 1.6;
+        npc.bubbleT = 3.5 + rng() * 5;
+        if (mood === 'laugh') Sfx.laugh();
+        else if (mood === 'cry') Sfx.sob();
+        else if (mood === 'angry') Sfx.warn();
+      } else {
+        npc.bubbleT = 1.5 + rng() * 2;
+      }
+    }
   }
 
   function makeCarEntity(opt) {
@@ -3393,7 +3563,7 @@
 
     // tear down every entity and the whole city, then rebuild in the new style
     const drop = (obj) => { if (obj && obj.parent) obj.parent.remove(obj); };
-    NPCs.forEach(n => drop(n.group));
+    NPCs.forEach(n => { drop(n.group); if (n.bubble) drop(n.bubble); });
     cars.forEach(c => drop(c.group));
     boats.forEach(b => drop(b.group));
     sharks.forEach(s => drop(s.group));
@@ -3656,6 +3826,7 @@
 
   function killNPC(npc, dir) {
     npc.dead = true;
+    if (npc.bubble) npc.bubble.visible = false;
     npc.deathT = 0;
     Sfx.die();
     spawnBlood(npc.pos.clone().setY(1.0), dir, 20);
@@ -4263,6 +4434,7 @@
     } else {
       npc.group.rotation.z = 0;
     }
+    updateFace(npc, dt);
   }
 
   function policeShoot(npc) {
@@ -6018,6 +6190,7 @@
     get cheatConsoleOpen() { return cheatOpen; },
     openCheatConsole, closeCheatConsole, runCheatCommand,
     applyWorldStyle, isVox, isNeon,
+    makeNPC, makeHuman,
     setWeather,
     strikeLightning: triggerLightning,
     setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },

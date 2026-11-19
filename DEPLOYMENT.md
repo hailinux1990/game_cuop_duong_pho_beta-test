@@ -113,7 +113,7 @@ cd game_test_gta
 node tests/smoke.test.cjs
 ```
 
-All 263 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
+All 271 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
 
 ### Mobile/iPad
 - Works with touch controls
@@ -174,6 +174,7 @@ game_test_gta/
 ## Version Notes
 - Full Unity-style graphics overhaul: sRGB output + ACES Filmic tone mapping, PBR (MeshStandardMaterial) materials, PCFSoft shadows that follow the player, emissive night windows & street lamps, animated water
 - Realism pass 2: shaded skin textures + coloured irises + sleeved arms/bare forearms, woven fabric folds + denim twill + print shirts, sneakers with white soles; bevelled ExtrudeGeometry car bodies with fender bulges, raked glass canopies, treaded tires + 5-spoke alloy rims, round glowing headlights; realistic great-white sharks (full fin set, gills, white belly, crescent tail); brick/concrete facades, asphalt with cracks, sidewalk joints, grass blades, sand speckle, roof gravel, curtained night windows, readable shop signs, rolling vertex waves on ocean + river
+- Gangstar Vegas pass 3: living pedestrian faces — per-NPC moods (calm/happy/talking/laughing/crying with dripping tears + sobbing/angry/fear with wide eyes), emoji speech bubbles (😊💬😂😭😠😱) over nearby heads, laugh/sob sound cues, suit + tie civilians, glowing billboards after dark
 - Two switchable graphics styles: UNITY CITY (modern daylight, default) and VICE CITY (neon sunset)
 - Detailed 3D pedestrians (two-segment arms/legs, ears, caps/police hats, sunglasses, skirts), detailed cars (sedan/sport/SUV/taxi/police with spinning wheels, animated doors), detailed speedboats
 - Gameplay unchanged (open world 11×11 blocks, 112 NPC, 34 cars, wanted system, weapons, weather/time)
