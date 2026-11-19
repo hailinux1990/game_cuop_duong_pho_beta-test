@@ -1,6 +1,6 @@
 # Deployment Guide — PIXEL VICE CITY
 
-PIXEL VICE CITY is a standalone **3D third-person open-world** web game (GTA Vice City style: sunset sky, neon pastel city) that runs in any modern browser on Windows, Ubuntu, or other platforms. It needs WebGL (hardware acceleration enabled).
+PIXEL VICE CITY — UNITY CITY is a standalone **3D third-person open-world** web game (GTA style) with a full **Unity-quality graphics overhaul** (sRGB + ACES tone mapping, PBR materials, soft shadows, detailed buildings/NPCs/vehicles) that runs in any modern browser on Windows, Ubuntu, or other platforms. It needs WebGL (hardware acceleration enabled).
 
 ## Quick Start
 
@@ -97,7 +97,7 @@ Then access the game at: `http://localhost:8080/`
 ### Performance issues
 1. **Close other tabs** - game uses significant GPU resources
 2. **Lower graphics** - some browsers have graphics settings
-3. **Increase pixel scale** - game uses `PIXEL_SCALE = 2` for pixel art look
+3. **Lower the quality preset** - Cài đặt → Đồ họa → Chất lượng Thấp (tắt bóng đổ, giảm độ phân giải)
 
 ### Audio not working
 - The game uses WebAudio API - ensure browser allows audio autoplay
@@ -113,7 +113,7 @@ cd game_test_gta
 node tests/smoke.test.cjs
 ```
 
-All 247 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
+All 252 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
 
 ### Mobile/iPad
 - Works with touch controls
@@ -162,7 +162,7 @@ Just upload all files (`index.html`, `js/`, `lib/`, `LICENSE`) to the root direc
 ```
 game_test_gta/
 ├── index.html          # Game interface
-├── js/game.js          # Game logic (~2800 lines)
+├── js/game.js          # Game logic + Unity-style graphics (~5600 lines)
 ├── lib/three.min.js    # Three.js engine (r128)
 ├── LICENSE            # Game license
 ├── README.md          # This documentation
@@ -172,8 +172,11 @@ game_test_gta/
 ```
 
 ## Version Notes
-- Third-person chase camera, sunset Vice City art direction, neon palms & bay
-- Low-poly Vice City-style 3D pedestrians (rounded heads/faces, hair styles, sunglasses, caps, uniforms, tropical shirts, female variants)
+- Full Unity-style graphics overhaul: sRGB output + ACES Filmic tone mapping, PBR (MeshStandardMaterial) materials, PCFSoft shadows that follow the player, emissive night windows & street lamps, animated water
+- Two switchable graphics styles: UNITY CITY (modern daylight, default) and VICE CITY (neon sunset)
+- Detailed low-poly 3D pedestrians (two-segment arms/legs, ears, caps/police hats, sunglasses, print shirts, skirts), detailed cars (sedan/sport/SUV/taxi/police with chrome rims, glowing lights, spinning wheels, animated doors), detailed speedboats
+- Rebuilt city: 128px window facades with night emissive maps, glass curtain-wall skyscrapers, storefronts, curbs, crosswalks, street lamps, benches, bus stops, billboards
+- Gameplay unchanged (open world 11×11 blocks, 112 NPC, 34 cars, wanted system, weapons, weather/time)
 - Built with Three.js r128
 - No external dependencies
 - All content procedural

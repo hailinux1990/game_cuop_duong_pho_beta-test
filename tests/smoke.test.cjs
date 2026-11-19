@@ -70,6 +70,10 @@ const THREE = require(path.join(ROOT, 'lib/three.min.js'));
 // mimic the browser: render() refreshes every object's world matrix
 THREE.WebGLRenderer = function (opts) {
   this.domElement = opts && opts.canvas;
+  this.outputEncoding = THREE.LinearEncoding;
+  this.toneMapping = THREE.NoToneMapping;
+  this.toneMappingExposure = 1;
+  this.shadowMap = { enabled: false, type: THREE.PCFShadowMap };
   this.setPixelRatio = () => {};
   this.setSize = () => {};
   this.render = (sc) => { sc.updateMatrixWorld(true); };
@@ -334,8 +338,18 @@ check('dense high-rise clusters generated (' + towers + ' towers >= 25 m)', towe
 
 /* ================= TEST 9: see-through occlusion fix =========================== */
 let tall = null;
-for (const b of G.buildingBoxes) if (!tall || b.h > tall.h) tall = b;
-// stand just north of the tallest tower and swing the chase camera around to
+// pick a tower with an open approach on its north side (the world layout varies)
+for (const b of G.buildingBoxes) {
+  if (b.h < 30) continue;
+  let clear = true;
+  for (const o of G.buildingBoxes) {
+    if (o === b) continue;
+    if (o.maxX > b.cx - 2 && o.minX < b.cx + 2 && o.maxZ > b.minZ - 10 && o.minZ < b.minZ) { clear = false; break; }
+  }
+  if (clear) { tall = b; break; }
+}
+check('found a tall tower with a clear approach', !!tall);
+// stand just north of the tower and swing the chase camera around to
 // the south side: the tower now stands between the lens and the hero, so it
 // must fade to glass instead of hiding him
 player.pos.set(tall.cx, 0, tall.minZ - 2);
@@ -618,8 +632,8 @@ step(20);                            // several AK rounds straight into the towe
 handlers.mouseup({ button: 0 });
 check('bullets are blocked by the tower (car behind it untouched)', (wallCar.shot || 0) === wallShotsBefore);
 
-/* ================= TEST 19: art direction + FREELIFE voxel style switch ========= */
-G.setTimeOfDay('afternoon'); // art-direction checks assume the sunset baseline
+/* ================= TEST 19: art direction + UNITY CITY style switch ========= */
+G.setTimeOfDay('afternoon'); // art-direction checks assume the daylight baseline
 G.setWeather('clear');
 step(2);
 const NEON_HEX = [0xff3fa4, 0x3fe0ff, 0xb45cff, 0xffd23f, 0xff6a3f, 0x64ff9a];
@@ -645,50 +659,59 @@ G.scene.traverse(o => {
 });
 check('sky dome is in the scene', skyDomes >= 1);
 check('glowing sun sprite is in the scene', sunSprites >= 1);
-check('warm sunset fog paints the horizon', G.scene.fog && G.scene.fog.color.getHex() === 0xff9a80);
+check('crisp daylight fog paints the horizon', G.scene.fog && G.scene.fog.color.getHex() === 0xbfd0de);
 check('huge ocean plane exists', !!oceanPlane && oceanPlane.position.y < 0);
 
-// ---- default look = FREELIFE (voxel kiểu Minecraft) ----
-check('default graphics style is FREELIFE voxel', G.settings.style === 'voxel' && G.isVox() === true);
-const voxHeads = countWorld(o => {
+// ---- default look = UNITY CITY (modern PBR) ----
+check('default graphics style is UNITY CITY modern',
+  G.settings.style === 'modern' && G.isNeon() === false && G.isVox() === false);
+const sedanBodies = countWorld(o => {
   const p = o.geometry.parameters || {};
-  return o.geometry.type === 'BoxGeometry' && p.width === 0.44 && p.height === 0.44 && p.depth === 0.44;
+  return o.geometry.type === 'BoxGeometry' && p.width === 1.92 && p.depth === 4.3;
 });
-check('voxel block-head citizens walk the city (' + voxHeads + ' block heads)', voxHeads >= 40);
-const voxCarBodies = countWorld(o => {
+check('detailed modern cars drive the streets (' + sedanBodies + ' bodies)', sedanBodies >= 20);
+const carRims = countWorld(o => {
   const p = o.geometry.parameters || {};
-  return o.geometry.type === 'BoxGeometry' && p.width === 1.8 && p.height === 0.62 && p.depth === 3.4;
+  return o.geometry.type === 'CylinderGeometry' && p.radiusTop === 0.2 && p.radiusBottom === 0.2;
 });
-check('voxel block cars drive the streets (' + voxCarBodies + ')', voxCarBodies >= 20);
-const voxFacades = G.buildingBoxes.filter(b => b.mats[0] && b.mats[0].map && b.mats[0].map.image &&
-  b.mats[0].map.image.width === 16).length;
-check('voxel buildings wear 16px pixel-window facades (' + voxFacades + ' towers)', voxFacades >= 30);
-check('FREELIFE voxel mode drops the neon signs', neonCount() === 0);
+check('cars ride on chrome rims (' + carRims + ' rims)', carRims >= 80);
+const facades128 = G.buildingBoxes.filter(b => b.mats[0] && b.mats[0].map && b.mats[0].map.image &&
+  b.mats[0].map.image.width === 128).length;
+check('buildings wear 128px window facades (' + facades128 + ' towers)', facades128 >= 30);
+const glassTowers = G.buildingBoxes.filter(b => b.mats[0] && b.mats[0].metalness > 0.4).length;
+check('glass curtain-wall skyscrapers exist (' + glassTowers + ')', glassTowers >= 5);
+const litFacades = G.buildingBoxes.filter(b => b.emissiveMats && b.emissiveMats.length >= 1).length;
+check('buildings carry night-window emissive maps (' + litFacades + ')', litFacades >= 30);
+check('UNITY CITY modern mode drops the neon signs', neonCount() === 0);
 G.respawn();           // clear any occlusion fade left by the wall test
 step(40);
-let voxFaded = 0;
-for (const b of G.buildingBoxes) if (b.mats[0].transparent) voxFaded++;
-check('voxel building facades start OPAQUE', voxFaded === 0);
+let modernFaded = 0;
+for (const b of G.buildingBoxes) if (b.mats[0].transparent) modernFaded++;
+check('modern building facades start OPAQUE', modernFaded === 0);
 
-// ---- switching to VICE CITY rebuilds the whole scene (all gameplay kept) ----
-G.applyWorldStyle('vice');
+// ---- switching to VICE CITY (neon) rebuilds the whole scene (all gameplay kept) ----
+G.applyWorldStyle('neon');
 step(3);
-check('style switch rebuilds the city in VICE CITY mode', G.settings.style === 'vice' && G.isVox() === false);
+check('style switch rebuilds the city in VICE CITY neon mode', G.settings.style === 'neon' && G.isNeon() === true);
 check('style switch keeps the world alive (112 NPC + 34 xe + hero)',
   !!player && !player.dead && G.NPCs.length === 112 && G.cars.length === 34);
 const palmTrunks = countWorld(o => o.geometry.type === 'CylinderGeometry' && o.material &&
   o.material.color && o.material.color.getHex() === 0x7a5a38);
 check('VICE CITY palms return (' + palmTrunks + ' trunks)', palmTrunks >= 20);
 check('VICE CITY neon lights dress the skyline (' + neonCount() + ' neon meshes)', neonCount() >= 50);
-let viceFaded = 0;
-for (const b of G.buildingBoxes) if (b.mats[0].transparent) viceFaded++;
-check('VICE CITY building facades start OPAQUE (no transparent pipeline cost)', viceFaded === 0);
+G.setTimeOfDay('afternoon'); G.setWeather('clear'); step(2);
+check('neon mode brings back the warm sunset fog', G.scene.fog && G.scene.fog.color.getHex() === 0xff9a80);
+let neonFaded = 0;
+for (const b of G.buildingBoxes) if (b.mats[0].transparent) neonFaded++;
+check('neon building facades start OPAQUE (no transparent pipeline cost)', neonFaded === 0);
 
-// ---- and back to FREELIFE voxel (the default the player sees) ----
-G.applyWorldStyle('voxel');
+// ---- and back to UNITY CITY modern (the default the player sees) ----
+G.applyWorldStyle('modern');
 step(3);
-check('style can switch back to FREELIFE voxel', G.settings.style === 'voxel' && G.isVox() === true &&
+check('style can switch back to UNITY CITY modern', G.settings.style === 'modern' && G.isNeon() === false &&
   !!player && G.NPCs.length === 112 && G.cars.length === 34);
+G.setTimeOfDay('afternoon'); G.setWeather('clear'); step(2);
+check('modern mode restores the crisp daylight fog', G.scene.fog && G.scene.fog.color.getHex() === 0xbfd0de);
 
 /* ================= TEST 23: Vice City 3D pedestrian rig ======================== */
 const rigNpc = G.NPCs.find(n => !n.dead);
@@ -700,7 +723,7 @@ check('pedestrian stands on the ground (feet ' + rigBB.min.y.toFixed(2) + ' m)',
 const rig = rigNpc.group.userData;
 check('pedestrian rig has head, hair, hands, shoes, legs and arms',
   !!rig.head && !!rig.hair && !!rig.handL && !!rig.handR && !!rig.shoeL && !!rig.legL && !!rig.armL);
-check('pedestrian body is sculpted from >= 15 low-poly pieces (' + rig.parts.length + ')', rig.parts.length >= 15);
+check('pedestrian body is sculpted from >= 20 low-poly pieces (' + rig.parts.length + ')', rig.parts.length >= 20);
 let rigGlasses = 0, rigCaps = 0, rigLong = 0;
 G.NPCs.forEach(n => {
   const u = n.group.userData;
@@ -708,20 +731,20 @@ G.NPCs.forEach(n => {
   u.parts.forEach(p => {
     const gp = p.geometry && p.geometry.parameters;
     if (!gp) return;
-    if (gp.width === 0.3 && gp.height === 0.08) rigGlasses++;
-    if (gp.width === 0.32 && gp.height === 0.34) rigLong++;
+    if (gp.width === 0.32 && gp.height === 0.085) rigGlasses++;
+    if (gp.width === 0.34 && gp.height === 0.42) rigLong++;
   });
 });
 check('street crowd wears sunglasses (' + rigGlasses + ')', rigGlasses >= 5);
 check('police and civilians wear caps (' + rigCaps + ')', rigCaps >= 10);
 check('long-haired pedestrians exist (' + rigLong + ')', rigLong >= 5);
 const heroEyes = G.player.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
-  p.geometry.parameters.width === 0.07 && p.geometry.parameters.height === 0.045).length;
+  p.geometry.parameters.width === 0.075 && p.geometry.parameters.height === 0.048).length;
 check('hero has a detailed 3D face (2 eyes)', heroEyes >= 2);
 check('hero wears a patterned tropical shirt', !!(G.player.group.userData.body.material.map));
 let rigPrints = 0;
 G.NPCs.forEach(n => { const m = n.group.userData.body && n.group.userData.body.material; if (m && m.map) rigPrints++; });
-check('some pedestrians wear tropical print shirts (' + rigPrints + ')', rigPrints >= 3);
+check('some pedestrians wear patterned print shirts (' + rigPrints + ')', rigPrints >= 3);
 
 
 /* ================= TEST 24: on-foot feel + car entry polish ==================== */
@@ -797,7 +820,7 @@ G.setTimeOfDay('afternoon');   // deterministic sunset baseline for the weather 
 G.setWeather('clear');
 step(2);
 let wx = G.weather;
-check('sunny weather keeps the warm sunset fog', wx.fogColor === 0xff9a80);
+check('sunny weather keeps the crisp daylight fog', wx.fogColor === 0xbfd0de);
 check('sun is visible in sunny weather', wx.sunVisible === true);
 check('clear weather restores visibility (fog far ' + Math.round(wx.fogFar) + ' m)', wx.fogFar > 550);
 check('weather HUD label shows sunny', els.weatherLabel.textContent.indexOf('NẮNG') >= 0);
@@ -821,7 +844,7 @@ check('lightning flash fades out', G.weather.lightning === 0);
 G.setWeather('clear');
 step(2);
 wx = G.weather;
-check('clearing weather brings the sunset back', wx.rain < 0.05 && wx.fogColor === 0xff9a80 && wx.sunVisible === true);
+check('clearing weather brings the daylight back', wx.rain < 0.05 && wx.fogColor === 0xbfd0de && wx.sunVisible === true);
 
 const cm = /^(\d{2}):(\d{2}):(\d{2})$/.exec(els.clockTime.textContent);
 check('clock displays HH:MM:SS ("' + els.clockTime.textContent + '")', !!cm);
@@ -902,7 +925,7 @@ G.setTimeOfDay('afternoon');
 step(2);
 ti = G.timeInfo;
 check('afternoon phase is CHIỀU', ti.phase === 'afternoon' && ti.label === 'CHIỀU');
-check('afternoon keeps the sunset fog', ti.fogColor === 0xff9a80);
+check('afternoon keeps the crisp daylight fog', ti.fogColor === 0xbfd0de);
 check('clock shows CHIỀU', els.timePhase.textContent === 'CHIỀU');
 
 G.setTimeOfDay('night');
@@ -912,7 +935,7 @@ check('night phase is TỐI', ti.phase === 'night' && ti.label === 'TỐI');
 check('night hides the sun', ti.sun < 0.1);
 check('night shows the moon', ti.moon > 0.5);
 check('night shows the stars', ti.stars > 0.5);
-check('night fog is dark (0x' + ti.fogColor.toString(16) + ')', ti.fogColor === 0x0b1022);
+check('night fog is dark (0x' + ti.fogColor.toString(16) + ')', ti.fogColor === 0x0a0e1c);
 check('clock shows TỐI', els.timePhase.textContent === 'TỐI');
 
 G.setGameHour(15);
@@ -1174,7 +1197,9 @@ step(2);
 G.respawn();
 player.hp = 100; player.armor = 0; player.wanted = 0;
 
-const bombVictim = G.NPCs.find(n => !n.dead && !n.swim && n.type === 'civilian');
+let bombVictim = G.NPCs.find(n => !n.dead && !n.swim && n.type === 'civilian')
+  || G.NPCs.find(n => !n.dead && !n.swim)
+  || G.dispatchCopNear(player.pos.x, player.pos.z + 12);
 bombVictim.hp = 100;
 bombVictim.dead = false;
 bombVictim.state = 'idle';

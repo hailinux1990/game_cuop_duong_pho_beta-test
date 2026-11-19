@@ -1,83 +1,53 @@
 # game_cuop_duong_pho_beta-test
-PIXEL VICE CITY — game thế giới mở **3D góc nhìn NGƯỜI THỨ BA** kiểu **GTA Vice City** (hoàng hôn Miami: neon hồng–lam, cọ biển, thành phố pastel).
+**PIXEL VICE CITY — UNITY CITY** — game thế giới mở **3D góc nhìn NGƯỜI THỨ BA** kiểu **GTA**, được đại tu toàn bộ hình ảnh theo chất lượng đồ họa **kiểu Unity 3D** chạy ngay trên nền web (WebGL).
 
-▶ Chơi ngay: http://127.0.0.1:8123/ — nếu trang không truy cập được, khởi động lại server bằng lệnh: `cd game_test_gta && python3 -m http.server 8123`. Máy cần bật WebGL (Chrome/Edge/Firefox mới, bật tăng tốc phần cứng).
+▶ Chơi ngay: mở `index.html` trực tiếp, hoặc `python3 -m http.server 8123` rồi truy cập http://127.0.0.1:8123/ (bật WebGL + tăng tốc phần cứng).
 
-## File đã tạo
-- **index.html** — giao diện: **MENU chính (BẮT ĐẦU · CÀI ĐẶT · GIỚI THIỆU)** + menu tạm dừng trong game; HUD máu, sao truy nã, khung vũ khí đang cầm, bảng chọn vũ khí (5 slot, slot 5 = BOM) · bảng lệnh cheat (phím ~), đạn, minimap, **đồng hồ GMT+7 + nhãn SÁNG/CHIỀU/TỐI + nhãn thời tiết**, đồng hồ tốc độ khi lái xe, WASTED (đã bỏ các dòng text hướng dẫn dài trên màn hình chính và icon tâm)
-- **js/game.js** — toàn bộ logic game (thuần Three.js, ~3.500 dòng)
+## 🎨 Bản đại tu đồ họa kiểu UNITY 3D (thay đổi TOÀN BỘ cảnh game)
+Toàn bộ môi trường, nhân vật và phương tiện đã được xây lại từ đầu với pipeline đồ họa hiện đại — **gameplay giữ nguyên 100%**.
+
+| Hạng mục | Nội dung mới |
+|---|---|
+| 🖥️ Pipeline render kiểu Unity | Linear→**sRGB**, **ACES Filmic tone mapping**, **bóng đổ mềm PCFSoft** (1024/2048), vật liệu **PBR MeshStandardMaterial** (roughness/metalness), camera bóng đổ **bám theo người chơi** |
+| 🏙️ Thành phố | Tòa nhà có **mặt dựng 128px**: ô cửa kính có khung, **cửa sổ phát sáng về đêm (emissiveMap)**, tầng trệt **cửa hàng mái hiên sọc + kính phản chiếu**, lan can mái, máy lạnh/bồn nước/ăng-ten, **tháp kính curtain-wall** ở lõi đô thị; 4 khu màu riêng |
+| 🚦 Đường phố | Vỉa hè có **bó vỉa nổi**, vạch kẻ đường + **vạch sang đường zebra** tại mọi ngã tư (gộp thành 1 draw call), **đèn đường hàng loạt** phát sáng về đêm, ghế công viên, trạm xe buýt, trụ cứu hỏa, biển quảng cáo |
+| 🌳 Thiên nhiên | Cọ cong trái dừa (neon), cây lá xanh + cây tùng (modern), công viên cỏ, cồn cát bãi biển |
+| 🌊 Nước | Biển + sông dùng **vật liệu nước động** (texture sóng cuộn, phản chiếu ánh nắng), bờ kè đá, trụ cầu + giàn chắn cầu |
+| ☀️ Bầu trời | Sky dome gradient theo **phong cách × thời điểm** (sáng/chiều/tối), mây bông xốp 3D, mặt trời/mặt trăng/stars |
+| 🚗 Xe cộ | **Sedan, sport (cánh gió), SUV, taxi (biển phát sáng), xe cảnh sát (đèn chớp xanh-đỏ)** — chassis, kính cabin, nóc, cột, cản, lưới tản nhiệt, biển số, **đèn pha/đèn hậu phát sáng**, gương chiếu hậu, **mâm crôm + vỏ xe quay**; tài xế ngồi trong xe; cửa mở/đóng khi lên xuống |
+| 🧍 Người đi đường | Humanoid chi tiết: đầu + **tai + hàm + mắt trắng/đồng tử/lông mày/mũi/miệng**, thân có cổ áo, tay 2 khớp (cánh tay + cẳng tay), chân 2 khớp, giày; **tóc ngắn/dài/búi/hói, mũ lưỡi trai, mũ cảnh sát**, kính râm, dây chuyền, huy hiệu, bao súng; áo **hoa nhiệt đới / sọc / kẻ plaid** (texture thủ tục), váy nữ; đổ bóng thật từ thân/đầu |
+| 🧔 Nhân vật chính | Khuôn mặt 3D chi tiết (2 mắt + lông mày + mũi + miệng), trang phục đổi theo phong cách: áo sọc hiện đại (UNITY CITY) / áo hoa Tommy (VICE CITY neon); đủ vũ khí cầm tay phải: nắm đấm, dao, súng lục, AK-47, bom |
+| 🛥️ Phương tiện sông | Thuyền máy: mũi nhọn, boong, cabin kính, lan can, máy đuôi — chạy 2 chiều dưới cầu |
+| 🗺️ Minimap | Tự đổi màu theo phong cách đồ họa đang chọn |
+
+## 🎭 2 phong cách đồ họa (Cài đặt → Phong cách đồ họa)
+- **UNITY CITY (hiện đại)** — mặc định: thành phố bê tông/kính ban ngày xanh trong, cây xanh, ánh sáng tự nhiên.
+- **VICE CITY (neon)** — hoàng hôn cam-hồng, nhà pastel, **biển hiệu neon phát sáng** trên phố và nóc nhà chọc trời, hàng cọ bãi biển.
+Chuyển phong cách bất cứ lúc nào — cả thế giới dựng lại, **giữ nguyên toàn bộ NPC, xe, hero và tiến trình trận đấu**.
+
+## File
+- **index.html** — giao diện: MENU chính (BẮT ĐẦU · CÀI ĐẶT · GIỚI THIỆU), menu tạm dừng; HUD máu/giáp, sao truy nã, vũ khí 5 slot, đạn, minimap, đồng hồ GMT+7 + nhãn SÁNG/CHIỀU/TỐI + thời tiết, đồng hồ tốc độ khi lái xe, WASTED, bảng lệnh cheat (phím ~)
+- **js/game.js** — toàn bộ logic + đồ họa (thuần Three.js r128, ~5.600 dòng, không tài nguyên ngoài)
 - **lib/three.min.js** — engine Three.js r128 (bản local)
-- **tests/smoke.test.cjs** — smoke test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
-- **tests/browser-smoke.html** — harness chạy game trong trình duyệt thật với WebGL giả lập (kiểm tra DOM/2D canvas/rAF)
-
-## 🎥 Bản cập nhật lớn: GÓC NHÌN NGƯỜI THỨ BA (GTA Vice City style)
-| Thay đổi | Chi tiết |
-|---|---|
-| 🎥 Camera bám sau lưng | Camera orbit quanh vai nhân vật, kéo theo mượt mà; chuột xoay TRÁI/PHẢI full 360° + LÊN/XUỐNG (pitch −63°…+46°), click để khoá chuột, ESC mở khoá; chưa khoá thì **giữ chuột phải đứng yên = ngắm, kéo chuột phải = xoay camera**; phím **C** chỉnh camera về sau lưng |
-| 🚫 Không icon tâm trên đầu | Đã bỏ hẳn icon tâm/crosshair khỏi HUD; nhân vật nằm dưới đường ngắm nên không che camera; ngắm bằng hướng camera + auto-aim kiểu GTA |
-| 🎬 Hành động kiểu GTA VC | Đứng thở/đung đưa nhẹ; súng **cầm đúng tay phải**, hạ thấp ngang hông khi đi, giơ lên hai tay khi ngắm/bắn; giật súng, giật tay khi bắn; đấm/chém có animation vung tay; chạy nước rút nghiêng người; **cửa xe mở ra rồi đóng lại khi lên/xuống xe** |
-| 🧍 NPC sống động | Đi/chạy có sải tay chân theo tốc độ, đứng chờ đung đưa nhẹ, cảnh sát giơ súng khi bắn, phụ nữ mặc váy, đa dạng áo in hoa/kính râm/mũ/huy hiệu |
-| 🖱️ Ngắm + auto-aim | Ngắm theo hướng camera (không cần icon tâm); đạn bay từ họng súng tới điểm ngắm; bắn ngang hông có cone auto-aim ~12,6° kiểu GTA, giữ chuột phải siết cone ~8° và giảm tản đạn |
-| 🎯 Ngắm cận vai | Giữ CHUỘT PHẢI: camera zoom sát vai phải, nhân vật đi chậm lại, bắn chính xác hơn |
-| 🔍 Lăn chuột | Zoom xa/gần camera (2,2 – 10 m) |
-| 🚶 WASD theo hướng camera | W đi về phía camera nhìn, A/D đi ngang; nhân vật xoay mượt về hướng chạy (khi ngắm thì xoay về hướng ngắm) |
-| 🏃 Animation | Chạy/nhảy bước chân, tay cầm súng giơ sẵn, giày + bàn tay + mặt (mắt/mũi) cho nhân vật chính |
-| 🚗 Camera khi lái xe | Camera tự bơi về sau đuôi xe sau khi ngừng xoay chuột; đồng hồ KM/H hiện ở giữa dưới màn hình |
-| 🧱 Chống khuất tầm nhìn | Nhà nào nằm giữa camera và nhân vật tự mờ thành kính (X-ray) rồi đặc lại khi hết chắn — giờ áp dụng cho mọi hướng xoay |
-| 🧊 Phong cách FREELIFE (voxel) | Mặc định: toàn bộ bối cảnh đổi theo FREELIFE — nhân vật & hero **khối hộp kiểu Minecraft** (đầu vuông mặt pixel, thân/tay/chân khối, áo hoạ tiết pixel), **xe ô tô khối vuông bánh vuông**, **nhà cao tầng tường pixel-window** 4 khu (đá xám / gạch / sa thạch / kính xanh), **cây khối**, đường nhựa xám + vạch trắng, nước xanh dương, không neon; đổi về **VICE CITY** (cọ biển + neon hoàng hôn) bất cứ lúc nào trong **Cài đặt → Phong cách đồ họa** — gameplay giữ nguyên 100% |
-| 🔫 Súng lục bắn TỪNG PHÁT | Click 1 lần = 1 viên, không bắn liên thanh khi giữ chuột; AK-47 GIỮ chuột = xả liên thanh |
-| ⏱️ Nạp đạn có thời gian | Súng lục 0,9 s · AK-47 1,4 s; hết đạn tự động nạp, HUD hiện % nạp; đổi vũ khí sẽ huỷ nạp |
-| 🎯 Giật & tản đạn | Mỗi phát giật camera + tay súng; xả AK làm loang tản đạn, ngắm chuột phải/đứng yên thì tụ lại; giật nhẹ hơn khi ngắm; rút/nạp đạn có animation hạ súng |
-| 🧱 Đạn bị tường chặn | Đạn bắn vào nhà/toà cao tầng bị chặn tại mặt tường (bụi tung lên), không xuyên qua nhà để trúng mục tiêu phía sau |
-| 🖥️ MENU chính & Cài đặt | Menu sạch: **BẮT ĐẦU · CÀI ĐẶT · GIỚI THIỆU** (đã bỏ các dòng text dài trên màn hình chính). **Cài đặt** gồm 3 tab: Đồ họa (chất lượng thấp/trung bình/cao, FOV, bật/tắt hiệu ứng mưa & mây, hiện FPS), Điều khiển (độ nhạy chuột, đảo trục dọc, bảng phím tắt), Âm thanh (âm lượng tổng, tắt tiếng). Cài đặt lưu lại cho lần sau; trong game bấm **☰** hoặc **M** để mở menu tạm dừng (Tiếp tục / Cài đặt / Giới thiệu) |
-| 🌗 GIỜ NGẪU NHIÊN Sáng/Chiều/Tối | Mỗi lần vào game bốc ngẫu nhiên **SÁNG / CHIỀU / TỐI**; bầu trời, sương, ánh sáng, mặt trời/mặt trăng, sao đêm đổi theo; cứ ~1,5–4 phút tự đổi giờ ngẫu nhiên (kèm thông báo), phím **G** đổi ngay lập tức. Giờ trong game chạy tiếp 1:1 và hiển thị trên HUD |
-| 🌉 Đi TRÊN CẦU đúng nghĩa | Đi bộ/lái xe qua cầu là **đi hẳn trên mặt cầu** (cao 1,5 m) — không còn bị rơi vào sông/nước giữa cầu; **lan can hai bên chặn không cho người/xe lọt xuống sông** (chỉ khi rời khỏi làn cầu mới bơi được); xe AI cũng chạy đúng mặt cầu |
-| 💣 Vũ khí mới: BOM NỔ | Phím **5**: ném lựu đạn theo quỹ đạo parabol tới điểm ngắm, đèn chớp cảnh báo khi sắp nổ (~2 s), nổ bán kính 6,5 m: sát thương người trong vùng, **xe gần đó bốc cháy và nổ dây chuyền**, có thể tự sát thương chính mình nếu đứng gần |
-| ⌨️ Bảng lệnh CHEAT (phím ~) | Bấm **~** mở bảng lệnh (game tạm dừng), gõ `health` (đầy máu), `armor` (đầy giáp), `reload` (full đạn + bom) rồi Enter; ESC/nút ĐÓNG để tiếp tục |
-| 🌦️ Thời tiết ngẫu nhiên | Chu kỳ NẮNG → MÂY ĐEN KÉO VỀ → MƯA RƠI → GIÔNG BÃO, chuyển ngẫu nhiên 30–90 s; mây trôi trên trời, sương/ánh sáng/sky tối dần, mặt trời mờ hẳn khi mưa, hạt mưa bám quanh người chơi, âm thanh mưa + sấm, **chớp trắng** khi giông; phím **T** đổi thời tiết ngay |
-| 🕒 Đồng hồ GMT+7 | HUD giữa trên màn hình hiển thị **giờ:phút:giây trong game theo múi giờ +7 đang chạy**, kèm nhãn **SÁNG/CHIỀU/TỐI** và thời tiết hiện tại (NẮNG/MÂY/MƯA/GIÔNG) |
-| 🚶 Di chuyển & lên xe mượt | Nhân vật tăng/giảm tốc có trọng lượng (không bật/tắt tốc độ tức thì), nhịp chân + tiếng bước chân, thân nghiêng nhẹ khi chạy nước rút, mặt quay theo hướng chạy; **va chạm thân người (bán kính 0,32 m)** với tường & xe đỗ (không xuyên tường/xe); gợi ý **"E — LÊN XE / TRỘM XE"** khi tới gần xe; lên xe camera tự xoay theo hướng xe; xuống xe chọn **cửa an toàn** (trái/phải/trước/sau, không vào tường/nước/xe khác), không cho lên xe xuyên tường; xe đã trộm **đứng yên** đúng chỗ sau khi xuống |
-| 🧍 NPC 3D kiểu Vice City | Bỏ khối pixel & khuôn mặt pixel: nhân vật low-poly 3D có đầu tròn + mặt 3D (mắt/mũi/miệng), tóc ngắn/dài/hói, kính râm, mũ lưỡi trai/mũ cảnh sát, thân áo thuôn, hông + thắt lưng, tay + bàn tay, chân + giày; áo in hoa nhiệt đới (texture thủ tục), da dẻ đa dạng, nữ thân hình nhỏ + tóc dài, cảnh sát đồng phục + huy hiệu — vẫn giữ animation tay chân, hitbox và headshot như cũ |
-| 🕶️ Nhân vật chính Tommy | Áo sơ mi kem, quần âu tối, tóc đen, khuôn mặt 3D chi tiết (mắt trắng + đồng tử + lông mày, mũi, miệng) — không còn khuôn mặt pixel |
-| 📱 Cảm ứng | Nửa trái = joystick di chuyển; nửa phải = kéo để xoay camera, chạm nhanh = tấn công; nút 1-4/R/E vẫn dùng bàn phím |
-
-## Gameplay cũ GIỮ NGUYÊN (chỉ đổi góc nhìn)
-| Tính năng | Trạng thái |
-|---|---|
-| Thế giới 3D mở 11×11 block (~385×385): đường, vỉa hè, nhà cao tầng, cọ, sông + cầu vòm | Giữ nguyên, thêm bãi biển/biển/neon |
-| 4 THÀNH PHỐ/TRUNG TÂM (kiểu Đông Anh): cụm tháp cao tầng, càng vào lõi càng cao (~57 m) | Giữ nguyên bố cục + đổi màu pastel |
-| 🚤 Thuyền chạy 2 chiều trên sông, chui dưới cầu nâng | Giữ nguyên |
-| 🚔 34 xe (26 dân + 8 cảnh sát) + 104 người đi đường (80 dân + 24 cảnh sát) | Giữ nguyên |
-| 🏎️ Lái xe mượt: fixed-timestep 60 Hz + nội suy render | Giữ nguyên, thêm cảm giác tăng tốc có trọng lượng |
-| 🚗💥 Bắn xe nổ tung + nổ dây chuyền + sát thương vụ nổ | Giữ nguyên |
-| 🚨 Hệ truy nã 1–5 sao, cảnh sát tăng cường theo sao, xe cảnh sát TRUY ĐUỔI, cảnh sát nhảy xuống bắn | Giữ nguyên |
-| Trộm xe có người lái (tài xế bị đẩy ra bỏ chạy / cảnh sát quay lại rượt) | Giữ nguyên |
-| Chạm xe không chết, xe AI phanh dừng trước mặt người chơi | Giữ nguyên |
-| Vũ khí: tay / dao / súng lục 100 viên / AK-47 500 viên / **BOM 6 quả**, mô hình cầm tay + HUD icon | Giữ nguyên, thêm BOM |
-| Aim-assist ±7°, headshot, đạn xuyên chuẩn, tầm bắn 220–340 m | Giữ nguyên |
-| Âm thanh thủ tục (WebAudio): súng, nổ, còi hú, đấm, chém, va chạm, tiếng phố | Giữ nguyên |
-
-## Điều khiển
-**WASD / mũi tên** di chuyển theo hướng camera · **SHIFT** chạy · **CHUỘT** xoay camera (click để khoá chuột) · **CLICK TRÁI** tấn công/bắn · **CLICK PHẢI (giữ)** ngắm cận vai · **LĂN CHUỘT** zoom
-**1·2·3·4·5** đổi vũ khí (tay / dao / súng lục bắn từng phát / AK-47 xả liên thanh / BOM nổ) · **R** nạp đạn (có thời gian) · **C** chỉnh camera về sau lưng · **E** lên xe / xuống xe / TRỘM XE
-**~** mở bảng lệnh CHEAT (health / armor / reload)
-Hỗ trợ cảm ứng (joystick trái + kéo phải để xoay camera + chạm để tấn công)
-
-## Cơ chế bổ sung (chất GTA)
-- Hệ truy nã 1–5 sao: đánh dân/cảnh sát, trộm xe, cho xe nổ làm tăng sao → cảnh sát bộ hành + ĐỘI XE CẢNH SÁT truy đuổi, bắn trả; trốn sau ~12s giảm sao, hết sao mọi lực lượng rút lui
-- Xe AI đâm người đi đường KHÔNG cộng sao oan (chỉ khi chính bạn lái). Máu hồi dần, màn hình đỏ khi trúng đạn, "WASTED" khi chết rồi hồi sinh
-- **Bơi ở sông/biển**: bước xuống bờ biển rộng, nhân vật bơi nổi nửa người, chèo tay/chân, không bắn khi đang bơi
-- **Cá mập**: 6 con tuần tra sông và vịnh — cắn người đang bơi (16 máu hero, 60 máu thường dân), bơi chạm mép là bị đớp
-- **Bắn từ trong xe (drive-by)**: ngồi trong xe vẫn bắn súng qua cửa sổ, đạn không bao giờ trúng chính xe mình
-- **Giáp + thanh giáp HUD**: nhận đạn trừ giáp trước, hết giáp mới trừ máu
-- **Bảng lệnh cheat (phím ~)**: mở bảng, gõ `health` (hồi máu), `armor` (đầy giáp), `reload` (full đạn + bom mọi vũ khí); vẫn có thể gõ nhanh liên tiếp khi đang chơi
-- **BOM nổ (slot 5)**: ném lựu đạn parabol, nổ bán kính 6,5 m, làm nổ dây chuyền xe gần đó; cẩn thận đừng đứng gần
-- **Cầu cao đúng nghĩa**: mọi nhân vật/xe qua cầu đi trên mặt cầu 1,5 m, không bị biến thành bơi giữa sông
-- Âm thanh thủ tục (WebAudio): súng, AK-47, đạn dội kim loại, TIẾNG NỔ BIG BOOM, CÒI HÚ CẢNH SÁT, đấm, chém, va chạm — không cần file ngoài
+- **tests/smoke.test.cjs** — 252 test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
+- **tests/browser-smoke.html** — harness kiểm tra game trong trình duyệt thật (stub WebGL)
+- **tests/mesh_count.cjs** — đếm mesh/vertex/material để kiểm soát hiệu năng
 
 ## Kiểm chứng
-- Cú pháp JS hợp lệ (`node --check js/game.js`)
-- Smoke test headless **247/247 PASS** (`node tests/smoke.test.cjs`): map 11×11 + 4 cụm thành phố cao tầng (82 tháp ≥25 m, cao nhất ~57 m) + sông/cầu nâng; spawn an toàn; 112 NPC (8 người bơi) + 34 xe đủ tài xế + 11 thuyền + 6 cá mập; AK-47 500 viên; **súng lục bắn từng phát / AK xả liên thanh**; **nạp đạn có thời gian + tự động nạp khi hết đạn**; **đạn bị tường chặn**; **giật súng + tản đạn**; aim-assist headshot/chest; **camera người thứ ba** (đứng sau lưng nhân vật, nhìn theo hướng camera, **nhân vật nằm dưới tâm ngắm**, tâm ngắm khớp hướng nhìn); **WASD theo hướng camera** (xoay camera đổi hướng đi, D đi ngang); **camera lái xe** + đồng hồ tốc độ; **ngắm cận vai** thu hẹp khoảng cách; **lăn chuột zoom**; **xoay chuột trái/phải/lên/xuống + đảo trục + độ nhạy**; **tăng/giảm tốc nhân vật + va chạm thân người với tường**; **gợi ý lên xe + camera bám hướng xe + xuống xe chọn cửa an toàn + xe trộm đứng yên**; **animation VC: súng hạ hông khi đi / giơ khi ngắm / đấm vung tay / cửa xe mở-đóng**; **NPC có váy, giơ súng khi bắn**; **không còn icon tâm trong HUD**; **điều khiển đúng theo màn hình: chuột phải → nhìn phải, D → sang phải, D khi lái → rẽ phải, camera ngắm lệch vai phải**; **thời tiết nắng/mây/mưa/giông + mưa hạt + chớp + đổi thời tiết bằng T**; **giờ ngẫu nhiên SÁNG/CHIỀU/TỐI: bật/tắt nắng, mặt trăng, sao đêm, sương đổi màu**; **đồng hồ GMT+7 trong game chạy + nhãn giờ**; **menu Bắt đầu/Cài đặt/Giới thiệu, đổi FOV/độ nhạy/đảo trục/âm lượng/đồ họa/FPS, tạm dừng bằng ☰**; **bơi sông/biển + cá mập cắn người bơi + bắn từ xe + giáp hấp thụ sát thương + cheat health/armor/reload**; **đi trên cầu đúng mặt cầu + lan can chặn người/xe khỏi rơi xuống sông + bảng lệnh cheat bằng phím ~ (health/armor/reload) + BOM nổ (ném, nổ dây chuyền, nổ trên mặt nước)**; xe phanh dừng không hại player; giật xe có tài xế; BẮN AK → XE NỔ + NỔ DÂY CHUYỀN; vòng đời TRUY ĐUỔI cảnh sát; TĂNG CƯỜNG THEO SAO (1→1, 3→3 xe + bộ hành, 5→tất cả); THUYỀN 2 chiều qua cầu nâng; BIỂU TƯỢNG vũ khí trên tay + HUD; FIX CHE KHUẤT bằng raycast segment–AABB theo camera thứ ba (fade 0.30 ↔ đặc 1.0); ĐỘ MƯỢT xe AI trượt ~0.16 đơn vị/khung hình.
-- Smoke test trong **trình duyệt thật** (`tests/browser-smoke.html`): game boot (FREELIFE voxel), 361 khung hình rAF, minimap vẽ đủ 150×150, 34 xe + 112 NPC, **đổi phong cách vice ↔ voxel không lỗi**, **0 lỗi JS**.
-- Rig test: NPC cao ~1,8–2,0 m đứng trên mặt đất, đủ đầu/tóc/bàn tay/giày/chân/tay, >=15 mảnh low-poly, cả khu phố có kính râm, mũ, tóc dài; hero có mặt 3D 2 mắt.
-- Container không có GPU/WebGL nên không chụp ảnh render thật được — mở link để xem trực tiếp.
+- `node --check js/game.js` — cú pháp hợp lệ
+- `node tests/smoke.test.cjs` — **252/252 PASS**, gồm toàn bộ gameplay cũ (map 11×11, 112 NPC, 34 xe, súng/bom/cheat/truy nã/cầu/thuyền/cá mập/thời tiết/giờ/menu…) **và đồ họa mới**: sky dome + sun sprite + fog ban ngày `0xbfd0de`, ocean ≥2000 m, 128px facade + emissiveMap về đêm, tháp kính, xe 1.92×4.3 + mâm crôm, rig người ≥20 mảnh (mắt 0.075, kính râm, mũ, tóc dài), đổi phong cách **modern ↔ neon** giữ nguyên 112 NPC + 34 xe, neon có ≥50 biển hiệu + ≥20 thân cọ, fog hoàng hôn `0xff9a80` ở neon, fog đêm `0x0a0e1c`, bóng đổ bám theo người chơi
+- Container không có GPU/WebGL nên không chụp ảnh render thật — mở link để xem trực tiếp.
+
+## Điều khiển (giữ nguyên)
+**WASD / mũi tên** di chuyển theo hướng camera · **SHIFT** chạy · **CHUỘT** xoay camera (click để khoá) · **CLICK TRÁI** bắn/đánh · **GIỮ CHUỘT PHẢI** ngắm cận vai · **LĂN CHUỘT** zoom · **1·2·3·4·5** vũ khí (tay/dao/súng lục/AK-47/BOM) · **R** nạp đạn · **C** camera sau lưng · **E** lên/xuống/trộm xe · **~** bảng cheat (health/armor/reload) · **T** đổi thời tiết · **G** đổi giờ ngẫu nhiên · **M/☰** menu tạm dừng · cảm ứng: joystick trái + kéo phải xoay camera
+
+## Gameplay giữ nguyên (tóm tắt)
+Thế giới mở 385×385 m: 4 cụm đô thị cao tầng, sông + cầu nâng 1,5 m, bãi biển; 112 người đi đường (80 dân + 24 cảnh sát + 8 người bơi), 34 xe (26 dân + 8 xe cảnh sát), 11 thuyền, 6 cá mập; truy nã 1–5 sao với xe cảnh sát truy đuổi + cảnh sát nhảy xuống bắn; trộm xe có tài xế (bị đẩy ra bỏ chạy); bắn xe nổ + nổ dây chuyền; bom nổ (slot 5) parabol + nổ dây chuyền; auto-aim ±12,6°, headshot, đạn bị tường chặn; nạp đạn có thời gian; giáp; bơi sông/biển + cá mập cắn; bắn từ trong xe (drive-by); thời tiết nắng→mây→mưa→giông (chớp, sấm); giờ ngẫu nhiên SÁNG/CHIỀU/TỐI + đồng hồ GMT+7; âm thanh thủ tục WebAudio.
+
+## Chạy thử nhanh
+```bash
+# Ubuntu/Linux
+python3 -m http.server 8123        # rồi mở http://127.0.0.1:8123/
+# Windows
+python -m http.server 8123
+```

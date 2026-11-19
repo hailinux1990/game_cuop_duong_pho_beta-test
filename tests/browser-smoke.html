@@ -35,6 +35,10 @@
   // no GL in this container: stub the renderer but keep the whole game logic real
   THREE.WebGLRenderer = function (opts) {
     this.domElement = opts && opts.canvas;
+    this.outputEncoding = THREE.LinearEncoding;
+    this.toneMapping = THREE.NoToneMapping;
+    this.toneMappingExposure = 1;
+    this.shadowMap = { enabled: false, type: THREE.PCFShadowMap };
     this.setPixelRatio = () => {};
     this.setSize = () => {};
     this.render = (sc) => { sc.updateMatrixWorld(true); };
@@ -67,6 +71,16 @@
             npcs: G ? G.NPCs.length : 0
           }, null, 1);
         } catch (e) { status.textContent = 'STATUS ERROR: ' + e.message + '\n' + e.stack; }
+        // graphics style switch smoke: UNITY CITY modern <-> VICE CITY neon
+        try {
+          G.applyWorldStyle('neon');
+          const afterNeon = { npcs: G.NPCs.length, cars: G.cars.length, style: G.settings.style };
+          G.applyWorldStyle('modern');
+          document.getElementById('status2').textContent = JSON.stringify({
+            styleSwitch: afterNeon, backTo: G.settings.style,
+            npcs: G.NPCs.length, cars: G.cars.length, errors: window.__bootErrors
+          });
+        } catch (e) { document.getElementById('status2').textContent = 'STYLE ERROR: ' + e.message; }
       }, 2500);
     });
     document.getElementById('startBtn').dispatchEvent(new MouseEvent('click', { bubbles: true }));
