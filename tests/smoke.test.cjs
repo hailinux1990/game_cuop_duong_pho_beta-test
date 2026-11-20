@@ -1393,6 +1393,21 @@ suited.userData.parts.forEach(p => {
   if (gp && gp.width === 0.06 && gp.height === 0.22) ties++;
 });
 check('sharp-dressed civilians wear suit ties (' + ties + ')', ties >= 1);
+// painted human faces + hair strands (Gangstar-style people)
+const faceNpc2 = mkMood('calm');
+const headMesh = faceNpc2.group.userData.head;
+check('heads wear painted faces (eye sockets + lips)',
+  !!headMesh.material.map && headMesh.material.map.image && headMesh.material.map.image.width === 128 &&
+  headMesh.material.map.wrapS === THREE.ClampToEdgeWrapping);
+check('heads have realistic proportions (radius ' + (headMesh.geometry.parameters.radius || 0) + ' m)',
+  headMesh.geometry.parameters.radius === 0.16);
+const hairMesh = faceNpc2.group.userData.hair;
+check('hair shows visible strands',
+  !!hairMesh && !!hairMesh.material.map && hairMesh.material.map.image && hairMesh.material.map.image.height === 128);
+const shoulderCaps = faceNpc2.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
+  p.geometry.parameters.radius === 0.085).length;
+check('shoulders are smooth caps (' + shoulderCaps + ')', shoulderCaps >= 2);
+G.setTimeOfDay('afternoon');
 // city lights glow after dark (billboards + windows + lamps)
 G.setTimeOfDay('night'); G.setWeather('clear'); step(2);
 let glowSurfaces = 0;
