@@ -113,7 +113,7 @@ cd game_test_gta
 node tests/smoke.test.cjs
 ```
 
-All 286 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
+All 291 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
 
 ### Mobile/iPad
 - Works with touch controls
@@ -177,6 +177,7 @@ game_test_gta/
 - Gangstar Vegas pass 3: living pedestrian faces — per-NPC moods (calm/happy/talking/laughing/crying with dripping tears + sobbing/angry/fear with wide eyes), emoji speech bubbles (😊💬😂😭😠😱) over nearby heads, laugh/sob sound cues, suit + tie civilians, glowing billboards after dark
 - Human pass 4 (real people): realistic head proportions + painted faces on the skull sphere (eye sockets, nose bridge, nostrils, lips, cheeks, brows), strand-textured hair, coloured irises over the sockets, smooth shoulder caps, rounded hips — the 3D mood rig still animates the face on top
 - Interaction pass 5: ESC opens/closes the pause menu (also via pointer-lock release); the idle hero turns to face the camera so you can inspect his face/eyes/body from the front; pedestrians glance at the hero when he walks close; ramming cars at speed shatters windshields/side windows (flying glass shards), makes the victim smoulder for a few seconds and then explode (chain reaction included)
+- Traffic pass 6: cars are solid bodies — AI cars never clip through each other, they brake and queue behind the car ahead then steer around obstructions, the rammed car grinds to a stop (stun), pedestrians walk AROUND cars instead of through them, the hero on foot is blocked by parked/moving cars, and all traffic keeps a consistent right-hand lane
 - Two switchable graphics styles: UNITY CITY (modern daylight, default) and VICE CITY (neon sunset)
 - Detailed 3D pedestrians (two-segment arms/legs, ears, caps/police hats, sunglasses, skirts), detailed cars (sedan/sport/SUV/taxi/police with spinning wheels, animated doors), detailed speedboats
 - Gameplay unchanged (open world 11×11 blocks, 112 NPC, 34 cars, wanted system, weapons, weather/time)

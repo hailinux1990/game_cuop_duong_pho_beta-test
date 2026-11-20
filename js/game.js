@@ -3269,7 +3269,7 @@
       group: g, route, wpIndex: wp, pos: start.clone(), heading: 0, speed: opt.speed || 7.5,
       isPolice: !!opt.isPolice, color: opt.color, maxSpeed: opt.speed || 7.5,
       curSpeed: opt.speed || 7.5,
-      laneOffset: (rng() < 0.5 ? 1 : -1) * (ROAD / 4), honkT: 0, dead: false,
+      laneOffset: ROAD / 4, honkT: 0, dead: false,      // right-hand lane keeps traffic tidy
       stolen: false, driverMesh: null,
       mode: 'traffic', deployed: false, deploySide: 2.2,   // police pursuit state
       prevPos: start.clone(), prevHeading: 0               // render-interpolation state
@@ -4327,6 +4327,43 @@
     });
   }
 
+  // cars are solid: push overlapping bodies apart; the player's car can also
+  // ram them hard enough to break glass, stop the victim and set it on fire
+  const _carSep = new THREE.Vector3();
+  function collideCars(mover, dt, damaging) {
+    const impactSpeed = Math.abs(mover.curSpeed);
+    for (let i = 0; i < cars.length; i++) {
+      const o = cars[i];
+      if (o === mover || o.dead) continue;
+      _carSep.set(mover.pos.x - o.pos.x, 0, mover.pos.z - o.pos.z);
+      let d = _carSep.length();
+      if (d < 0.001) { _carSep.set(1, 0, 0); d = 0.001; }
+      if (d >= 2.2) continue;
+      // solid bodies: separate both cars
+      const push = (2.2 - d) / 2;
+      _carSep.normalize();
+      mover.pos.addScaledVector(_carSep, push);
+      o.pos.addScaledVector(_carSep, -push);
+      clampToWorld(mover.pos);
+      clampToWorld(o.pos);
+      if (!damaging || impactSpeed <= 5) continue;
+      o.crashCd = (o.crashCd || 0) - dt;
+      if (o.crashCd > 0) continue;
+      o.crashCd = 0.5;
+      o.crashDmg = (o.crashDmg || 0) + impactSpeed * 0.4;
+      Sfx.metalHit();
+      spawnSparks(mover.pos.clone().setY(0.8), new THREE.Vector3(Math.sin(mover.heading), 0, Math.cos(mover.heading)));
+      spawnSmoke(new THREE.Vector3(
+        o.group.position.x + Math.sin(o.heading) * 1.3, 1.0,
+        o.group.position.z + Math.cos(o.heading) * 1.3), 0.5);
+      if (o.crashDmg >= 2.2) {
+        breakCarGlass(o);
+        o.stunT = Math.max(o.stunT || 0, 1.2);       // the rammed car comes to a stop
+      }
+      if (o.crashDmg >= 4 && o.fuseT === undefined) { o.fuseT = 3.0; Sfx.warn(); }
+    }
+  }
+
   // windshield + side windows shatter into flying shards
   function breakCarGlass(car) {
     if (car.glassBroken) return;
@@ -4528,6 +4565,20 @@
       clampToWorld(npc.pos);
       npc.facing = Math.atan2(moveDir.x, moveDir.z);
       npc.anim += dt * (npc.speed * 2.2);
+    }
+    // cars are solid for pedestrians too: walk around, never through
+    for (let ci = 0; ci < cars.length; ci++) {
+      const c = cars[ci];
+      if (c.dead) continue;
+      const dx = npc.pos.x - c.pos.x, dz = npc.pos.z - c.pos.z;
+      const dd = Math.hypot(dx, dz);
+      const minD = 1.25;
+      if (dd > 0.001 && dd < minD) {
+        npc.pos.x = c.pos.x + dx / dd * minD;
+        npc.pos.z = c.pos.z + dz / dd * minD;
+      } else if (dd <= 0.001) {
+        npc.pos.x = c.pos.x + minD;
+      }
     }
     npc.group.position.set(npc.pos.x, npc.pos.y, npc.pos.z);
     npc.group.rotation.y = npc.facing;
@@ -4775,14 +4826,36 @@
     let target = car.maxSpeed * Math.max(0.35, 1 - Math.abs(dh) * 0.55);
     let rate = 1.9;
     if (playerNear) { target = 0; rate = 6; }
+
+    // traffic queues: brake behind the car ahead instead of driving through it
+    let blocked = false, aheadDist = 99;
+    for (let i = 0; i < cars.length; i++) {
+      const o = cars[i];
+      if (o === car || o.dead) continue;
+      const dx = o.pos.x - car.pos.x, dz = o.pos.z - car.pos.z;
+      const dd = Math.hypot(dx, dz);
+      if (dd > 6 || dd < 0.4) continue;
+      const dot = (dx * Math.sin(car.heading) + dz * Math.cos(car.heading)) / dd;
+      if (dot > 0.55) { blocked = true; if (dd < aheadDist) aheadDist = dd; }
+    }
+    if (car.stunT > 0) { car.stunT -= dt; target = 0; rate = 6; }      // rammed: grind to a halt
+    else if (blocked) {
+      car.blockedT = (car.blockedT || 0) + dt;
+      if (aheadDist < 2.6) target = 0;                                 // right on their bumper
+      else target = Math.min(target, car.maxSpeed * 0.3);              // crawl up behind
+      rate = 5;
+    } else {
+      car.blockedT = 0;
+    }
     car.curSpeed += (target - car.curSpeed) * Math.min(1, dt * rate);
-    if (playerNear && car.curSpeed < 0.02) car.curSpeed = 0;
+    if ((playerNear || (blocked && aheadDist < 2.6)) && car.curSpeed < 0.02) car.curSpeed = 0;
 
     if (car.curSpeed > 0.01) {
-      steerToward(car, wx, wz, dt, false, 2.4);
+      steerToward(car, wx, wz, dt, (car.blockedT || 0) > 2.2, 2.4);
       const fwd = new THREE.Vector3(Math.sin(car.heading), 0, Math.cos(car.heading));
       car.pos.addScaledVector(fwd, car.curSpeed * dt);
       clampToWorld(car.pos);
+      collideCars(car, dt, false);       // solid bodies even for AI traffic
     }
   }
 
@@ -4811,6 +4884,7 @@
       car.pos.add(step);
       if (isInsideBuilding(car.pos.x, car.pos.z)) car.pos.sub(step);   // never clip walls
       clampToWorld(car.pos);
+      collideCars(car, dt, false);       // cruisers can't ghost through traffic
     }
   }
 
@@ -4824,14 +4898,23 @@
       const ahead = 3.4;
       const fx = car.pos.x + Math.sin(car.heading) * ahead;
       const fz = car.pos.z + Math.cos(car.heading) * ahead;
-      if (isInsideBuilding(fx, fz)) {
+      if (isInsideBuilding(fx, fz) || carAheadAt(fx, fz)) {
         const lx = car.pos.x + Math.sin(car.heading + 0.9) * ahead;
         const lz = car.pos.z + Math.cos(car.heading + 0.9) * ahead;
-        dh = (isInsideBuilding(lx, lz) ? -1 : 1) * 1.1;   // swing to the free side
+        dh = ((isInsideBuilding(lx, lz) || carAheadAt(lx, lz)) ? -1 : 1) * 1.1;   // swing to the free side
       }
     }
     const maxTurn = (turnRate || 2.4) * dt;                  // rad/s ceiling
     car.heading += Math.max(-maxTurn, Math.min(maxTurn, dh));
+  }
+  function carAheadAt(x, z) {
+    for (let i = 0; i < cars.length; i++) {
+      const o = cars[i];
+      if (o.dead) continue;
+      const dx = o.pos.x - x, dz = o.pos.z - z;
+      if (dx * dx + dz * dz < 3.2 * 3.2) return true;
+    }
+    return false;
   }
 
   // a police officer jumps out of the stopped cruiser and hunts the hero on foot
@@ -5257,7 +5340,7 @@
   function carBlocked(x, z, r) {
     for (let i = 0; i < cars.length; i++) {
       const c = cars[i];
-      if (c.dead || Math.abs(c.curSpeed) > 1.2) continue;
+      if (c.dead) continue;
       const fx = Math.sin(c.heading), fz = Math.cos(c.heading);
       const rr = r + 0.95, rr2 = rr * rr;
       for (let k = -1; k <= 1; k += 2) {
@@ -5507,34 +5590,9 @@
       }
     });
 
-    // ramming other cars: shattered glass, hood smoke, then the wreck blows up
-    const impactSpeed = Math.abs(car.curSpeed);
-    if (impactSpeed > 5) {
-      cars.forEach(o => {
-        if (o === car || o.dead) return;
-        const d = car.pos.distanceTo(o.pos);
-        if (d < 2.5) {
-          o.crashCd = (o.crashCd || 0) - dt;
-          if (o.crashCd <= 0) {
-            o.crashCd = 0.5;
-            o.crashDmg = (o.crashDmg || 0) + impactSpeed * 0.4;
-            // nudge the victim forward under the impact
-            o.pos.addScaledVector(fwd, impactSpeed * dt * 0.8);
-            clampToWorld(o.pos);
-            Sfx.metalHit();
-            spawnSparks(car.pos.clone().setY(0.8), fwd);
-            spawnSmoke(new THREE.Vector3(
-              o.group.position.x + Math.sin(o.heading) * 1.3, 1.0,
-              o.group.position.z + Math.cos(o.heading) * 1.3), 0.5);
-            if (o.crashDmg >= 2.2) breakCarGlass(o);
-            if (o.crashDmg >= 4 && o.fuseT === undefined) {
-              o.fuseT = 3.0;               // smoulders a few seconds, then explodes
-              Sfx.warn();
-            }
-          }
-        }
-      });
-    }
+    // ramming other cars: solid impact — shattered glass, the victim stops,
+    // smoulders a few seconds, then blows up
+    collideCars(car, dt, true);
     player.pos.copy(car.pos);
   }
 
@@ -6365,7 +6423,7 @@
     get cheatConsoleOpen() { return cheatOpen; },
     openCheatConsole, closeCheatConsole, runCheatCommand,
     applyWorldStyle, isVox, isNeon,
-    makeNPC, makeHuman,
+    makeNPC, makeHuman, makeCarEntity,
     setWeather,
     strikeLightning: triggerLightning,
     setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },

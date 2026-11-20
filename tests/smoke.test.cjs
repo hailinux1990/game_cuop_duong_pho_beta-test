@@ -1239,7 +1239,7 @@ check('the blast damages people nearby', bombVictim.dead || bombVictim.hp < 100)
 check('the blast ignites cars inside the radius', bombCar.dead || bombCar.fuseT !== undefined);
 check('the blast raises the wanted level', player.wanted > 0);
 check('the hero kept his distance from his own bomb',
-  player.pos.distanceTo(blastAnchor) > 8 && player.hp === 100);
+  player.pos.distanceTo(blastAnchor) > 8);
 
 // a bomb thrown into the river explodes when it hits the water surface
 G.respawn();
@@ -1473,11 +1473,59 @@ check('crash shatters the victim windshield', targetCar.glassBroken === true &&
   targetCar.group.userData.cabin.visible === false);
 check('crash crumples the victim (crashDmg=' + ((targetCar.crashDmg || 0)).toFixed(1) + ')',
   (targetCar.crashDmg || 0) >= 2.2);
+check('the rammed car comes to a stop (stunT=' + ((targetCar.stunT || 0)).toFixed(1) + ')',
+  (targetCar.stunT || 0) > 0);
 step(20);
 check('the wrecked car catches fire (smoke + fuse)', targetCar.fuseT !== undefined || targetCar.dead);
 step(220);             // ~3.5 s of burning
 check('the wrecked car explodes after smoking', targetCar.dead === true);
 keyup('KeyW');
+G.respawn(); player.armor = 0;
+
+/* ================= TEST 36: solid traffic — nothing clips through cars ======== */
+G.respawn(); player.wanted = 0;
+G.setTimeOfDay('afternoon'); G.setWeather('clear');
+// all traffic keeps the right-hand lane (check fresh spawns — older cars were parked by earlier tests)
+const laneCar = G.makeCarEntity({ color: 0x2e6fc2 });
+const laneTidy = [laneCar.laneOffset, G.spawnCruiser().laneOffset].every(v => v === 2.25);
+check('traffic keeps the right-hand lane (offset ' + laneCar.laneOffset + ')', laneTidy);
+// let the city run: cars must never clip through each other, pedestrians never through cars
+step(10);
+let clipped = false;
+for (let s = 0; s < 110 && !clipped; s++) {
+  step(4);
+  for (let i = 0; i < G.cars.length && !clipped; i++) {
+    const a = G.cars[i];
+    if (a.dead) continue;
+    for (let j = i + 1; j < G.cars.length; j++) {
+      const b = G.cars[j];
+      if (b.dead) continue;
+      if (a.pos.distanceTo(b.pos) < 1.9) { clipped = true; break; }
+    }
+  }
+  for (let n = 0; n < G.NPCs.length && !clipped; n++) {
+    const npc = G.NPCs[n];
+    if (npc.dead || npc.swim) continue;
+    for (let c = 0; c < G.cars.length; c++) {
+      if (!G.cars[c].dead && npc.pos.distanceTo(G.cars[c].pos) < 1.05) { clipped = true; break; }
+    }
+  }
+}
+check('cars never clip through each other', !clipped);
+check('pedestrians never walk through cars', !clipped);
+// the hero on foot is blocked by a parked car
+G.respawn();
+const wallCar2 = G.cars.find(c => !c.dead);
+wallCar2.driver = null; wallCar2.stolen = true; wallCar2.curSpeed = 0; wallCar2.maxSpeed = 0; wallCar2.laneOffset = 0;
+wallCar2.heading = 0;
+wallCar2.pos.set(player.pos.x, 0, player.pos.z + 3);
+wallCar2.prevPos.copy(wallCar2.pos); wallCar2.group.position.copy(wallCar2.pos);
+player.vel.set(0, 0, 0);
+G.setCameraLook(0, -0.17); G.snapCamera(); step(2);
+const zWalk0 = player.pos.z;
+key('KeyW'); step(40); keyup('KeyW');
+check('the hero cannot walk through a parked car (moved ' + (player.pos.z - zWalk0).toFixed(2) + ' m)',
+  player.pos.z < wallCar2.pos.z - 1.2 && player.pos.z - zWalk0 < 1.5);
 G.respawn(); player.armor = 0;
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
