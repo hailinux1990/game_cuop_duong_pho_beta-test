@@ -1418,5 +1418,67 @@ G.scene.traverse(o => {
 check('city lights glow after dark (' + glowSurfaces + ' emissive surfaces)', glowSurfaces >= 5);
 G.setTimeOfDay('afternoon'); step(2);
 
+/* ================= TEST 35: ESC pause, front-facing hero, crash damage ======== */
+G.respawn(); player.wanted = 0;
+// ESC opens the pause menu, ESC again resumes
+key('Escape');
+check('ESC opens the pause menu', G.paused === true);
+key('Escape');
+check('ESC again resumes the game', G.paused === false);
+// idle hero turns to face the camera (front view: painted face, eyes, body)
+G.setCameraLook(0, -0.17); G.snapCamera(); step(2);
+player.vel.set(0, 0, 0);
+step(30);
+let df = player.facing - (G.cameraState.yaw + Math.PI);
+while (df > Math.PI) df -= Math.PI * 2;
+while (df < -Math.PI) df += Math.PI * 2;
+check('idle hero faces the camera (front view)', Math.abs(df) < 0.25);
+G.setCameraLook(1.2, -0.17); G.snapCamera(); step(40);
+df = player.facing - (G.cameraState.yaw + Math.PI);
+while (df > Math.PI) df -= Math.PI * 2;
+while (df < -Math.PI) df += Math.PI * 2;
+check('hero turns to follow the orbiting camera', Math.abs(df) < 0.25);
+// pedestrians glance at the hero when he walks close by
+const watcher = G.makeNPC('civilian');
+watcher.pos.set(player.pos.x + 3, 0, player.pos.z);
+watcher.group.position.copy(watcher.pos);
+step(10);
+let wantHead = Math.atan2(player.pos.x - watcher.pos.x, player.pos.z - watcher.pos.z) - watcher.facing;
+while (wantHead > Math.PI) wantHead -= Math.PI * 2;
+while (wantHead < -Math.PI) wantHead += Math.PI * 2;
+const expectedGlance = Math.max(-0.9, Math.min(0.9, wantHead));
+check('pedestrian head tracks the hero (yaw ' + watcher.group.userData.head.rotation.y.toFixed(2) +
+  ' vs expected ' + expectedGlance.toFixed(2) + ')',
+  Math.abs(watcher.group.userData.head.rotation.y - expectedGlance) < 0.1);
+watcher.pos.set(400, 0, 400); watcher.group.position.copy(watcher.pos);
+step(5);
+check('pedestrian stops staring once the hero leaves', Math.abs(watcher.group.userData.head.rotation.y) < 0.05);
+// ramming a car: glass shatters, wreck smokes, then explodes
+G.respawn(); player.wanted = 0;
+let targetCar = G.cars.find(c => !c.dead);
+targetCar.driver = null; targetCar.stolen = true; targetCar.curSpeed = 0; targetCar.maxSpeed = 0; targetCar.laneOffset = 0;
+targetCar.pos.set(player.pos.x, 0, player.pos.z + 6);
+targetCar.prevPos.copy(targetCar.pos); targetCar.group.position.copy(targetCar.pos);
+const ramCar = G.cars.find(c => !c.dead && c !== targetCar);
+ramCar.driver = null; ramCar.stolen = true; ramCar.curSpeed = 0; ramCar.laneOffset = 0;
+ramCar.pos.set(player.pos.x, 0, player.pos.z + 1);
+ramCar.prevPos.copy(ramCar.pos); ramCar.group.position.copy(ramCar.pos);
+ramCar.heading = 0; ramCar.maxSpeed = 13;
+player.pos.set(ramCar.pos.x, 0, ramCar.pos.z - 1.2);
+player.group.position.copy(player.pos);
+key('KeyE');           // hop in
+check('hero hops in the ramming car', player.inCar === ramCar);
+key('KeyW'); step(46); // accelerate straight into the parked car
+check('crash shatters the victim windshield', targetCar.glassBroken === true &&
+  targetCar.group.userData.cabin.visible === false);
+check('crash crumples the victim (crashDmg=' + ((targetCar.crashDmg || 0)).toFixed(1) + ')',
+  (targetCar.crashDmg || 0) >= 2.2);
+step(20);
+check('the wrecked car catches fire (smoke + fuse)', targetCar.fuseT !== undefined || targetCar.dead);
+step(220);             // ~3.5 s of burning
+check('the wrecked car explodes after smoking', targetCar.dead === true);
+keyup('KeyW');
+G.respawn(); player.armor = 0;
+
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');
 process.exit(failures === 0 ? 0 : 1);

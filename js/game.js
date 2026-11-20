@@ -205,6 +205,10 @@
     shoot() { this.noise(0.12, 0.5, 2600, true); this.tone(140, 0.09, 'square', 0.25, 50); },
     ak() { this.noise(0.1, 0.55, 2100, true); this.tone(110, 0.08, 'square', 0.24, 45); this.noise(0.04, 0.2, 4200); },
     metalHit() { this.tone(1600 + Math.random() * 800, 0.05, 'square', 0.12, 600); this.noise(0.04, 0.16, 5200); },
+    glass() {
+      this.noise(0.14, 0.3, 6800);
+      for (let i = 0; i < 5; i++) this.tone(2300 + Math.random() * 2400, 0.06, 'sine', 0.05, 1200 + Math.random() * 900);
+    },
     boom() { this.noise(0.5, 0.85, 900, true); this.tone(60, 0.5, 'sawtooth', 0.35, 24); this.noise(0.22, 0.4, 2400, true); },
     siren() {
       if (!this.ctx) return;
@@ -2840,6 +2844,7 @@
     g.userData.wheels = wheels;
     g.userData.body = body;
     g.userData.cabin = windshield; g.userData.hood = hood; g.userData.trunk = trunk;
+    g.userData.sideL = sideL; g.userData.sideR = sideR; g.userData.rearGlass = rearGlass;
     g.userData.doorL = hingeL; g.userData.doorR = hingeR;
     g.userData.doorMeshes = [doorL, doorR];
     return g;
@@ -4322,6 +4327,29 @@
     });
   }
 
+  // windshield + side windows shatter into flying shards
+  function breakCarGlass(car) {
+    if (car.glassBroken) return;
+    car.glassBroken = true;
+    const u = car.group.userData;
+    [u.cabin, u.sideL, u.sideR, u.rearGlass].forEach(m => { if (m) m.visible = false; });
+    if (u.cabin) {
+      const hi = hittables.indexOf(u.cabin);
+      if (hi >= 0) hittables.splice(hi, 1);
+    }
+    const p = car.pos.clone().setY(1.15);
+    Sfx.glass();
+    for (let i = 0; i < 14; i++) {
+      const shard = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.06 + rng() * 0.09, 0.06 + rng() * 0.09),
+        new THREE.MeshBasicMaterial({ color: i % 2 ? 0xcfeef4 : 0x8fc8d8, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+      shard.position.copy(p);
+      shard.rotation.set(rng() * 3, rng() * 3, rng() * 3);
+      bloodParticles.push({ mesh: shard, vel: new THREE.Vector3((rng() - 0.5) * 6, 1.5 + rng() * 3.5, (rng() - 0.5) * 6), life: 0.9 + rng() * 0.6, t: 0 });
+      scene.add(shard);
+    }
+  }
+
   function explodeCar(car) {
     if (car.dead) return;
     car.dead = true;
@@ -4503,6 +4531,18 @@
     }
     npc.group.position.set(npc.pos.x, npc.pos.y, npc.pos.z);
     npc.group.rotation.y = npc.facing;
+    // pedestrians glance at the hero when he strolls close by
+    if (npc.type === 'civilian' && npc.state !== 'flee' && player && !player.dead &&
+        npc.pos.distanceTo(player.pos) < 8) {
+      let wantHead = Math.atan2(player.pos.x - npc.pos.x, player.pos.z - npc.pos.z) - npc.facing;
+      while (wantHead > Math.PI) wantHead -= Math.PI * 2;
+      while (wantHead < -Math.PI) wantHead += Math.PI * 2;
+      const u = npc.group.userData;
+      if (u.head) u.head.rotation.y = Math.max(-0.9, Math.min(0.9, wantHead));
+    } else {
+      const u = npc.group.userData;
+      if (u.head) u.head.rotation.y = 0;
+    }
     // limb animation: stride grows with walking / fleeing speed
     const spdK = Math.min(1, npc.speed / 4.6);
     const swing = moving ? Math.sin(npc.anim) * (0.28 + spdK * 0.42) : 0;
@@ -5009,6 +5049,10 @@
     else if (code === 'BracketLeft') { sensScale = Math.max(0.4, sensScale / 1.15); settings.sens = sensScale; saveSettings(); syncSettingsUI(); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
     else if (code === 'KeyY') { invertY = !invertY; settings.invertY = invertY; saveSettings(); syncSettingsUI(); toast(invertY ? 'Đảo trục dọc: BẬT' : 'Đảo trục dọc: TẮT'); Sfx.click(); }
     else if (code === 'KeyM') { openPause(); }
+    else if (code === 'Escape') {
+      if (paused) resumeGame();
+      else openPause();
+    }
     else if (code === 'KeyT') {
       const order = ['clear', 'cloudy', 'rain', 'storm'];
       const next = order[(order.indexOf(weatherState) + 1) % order.length];
@@ -5120,10 +5164,18 @@
       });
     }
     if (document.addEventListener) {
+      let lockWasHeld = false;
       document.addEventListener('pointerlockchange', () => {
         dragLook = false;
-        if (document.pointerLockElement === canvas) toast('CHUỘT khoá — ESC để mở khoá');
-        else toast('Đã mở khoá chuột — click để khoá lại');
+        if (document.pointerLockElement === canvas) {
+          lockWasHeld = true;
+          toast('CHUỘT khoá — ESC để mở MENU tạm dừng');
+        } else {
+          const justUnlocked = lockWasHeld;
+          lockWasHeld = false;
+          toast('Đã mở khoá chuột — click để khoá lại');
+          if (justUnlocked && !paused && player && !player.dead) openPause();
+        }
       });
     }
 
@@ -5329,6 +5381,7 @@
     const aimingNow = aimHeld || (mouse.down && player.weapon !== 0);
     let targetFacing = aimFacing;
     if (!aimingNow && speed > 0.4) targetFacing = Math.atan2(vel.x, vel.z);
+    else if (!aimingNow && speed <= 0.4) targetFacing = camYaw + Math.PI;  // idle: turn to face the camera
     player.facing = angLerp(player.facing, targetFacing, Math.min(1, dt * 14));
     player.group.rotation.y = player.facing;
 
@@ -5453,6 +5506,35 @@
         triggerCrime(n.type === 'police' ? 1.5 : 0.8);
       }
     });
+
+    // ramming other cars: shattered glass, hood smoke, then the wreck blows up
+    const impactSpeed = Math.abs(car.curSpeed);
+    if (impactSpeed > 5) {
+      cars.forEach(o => {
+        if (o === car || o.dead) return;
+        const d = car.pos.distanceTo(o.pos);
+        if (d < 2.5) {
+          o.crashCd = (o.crashCd || 0) - dt;
+          if (o.crashCd <= 0) {
+            o.crashCd = 0.5;
+            o.crashDmg = (o.crashDmg || 0) + impactSpeed * 0.4;
+            // nudge the victim forward under the impact
+            o.pos.addScaledVector(fwd, impactSpeed * dt * 0.8);
+            clampToWorld(o.pos);
+            Sfx.metalHit();
+            spawnSparks(car.pos.clone().setY(0.8), fwd);
+            spawnSmoke(new THREE.Vector3(
+              o.group.position.x + Math.sin(o.heading) * 1.3, 1.0,
+              o.group.position.z + Math.cos(o.heading) * 1.3), 0.5);
+            if (o.crashDmg >= 2.2) breakCarGlass(o);
+            if (o.crashDmg >= 4 && o.fuseT === undefined) {
+              o.fuseT = 3.0;               // smoulders a few seconds, then explodes
+              Sfx.warn();
+            }
+          }
+        }
+      });
+    }
     player.pos.copy(car.pos);
   }
 

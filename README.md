@@ -53,17 +53,19 @@ Chuyển phong cách bất cứ lúc nào — cả thế giới dựng lại, **
 - **index.html** — giao diện: MENU chính (BẮT ĐẦU · CÀI ĐẶT · GIỚI THIỆU), menu tạm dừng; HUD máu/giáp, sao truy nã, vũ khí 5 slot, đạn, minimap, đồng hồ GMT+7 + nhãn SÁNG/CHIỀU/TỐI + thời tiết, đồng hồ tốc độ khi lái xe, WASTED, bảng lệnh cheat (phím ~)
 - **js/game.js** — toàn bộ logic + đồ họa (thuần Three.js r128, ~5.600 dòng, không tài nguyên ngoài)
 - **lib/three.min.js** — engine Three.js r128 (bản local)
-- **tests/smoke.test.cjs** — 275 test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
+- **tests/smoke.test.cjs** — 286 test headless (Node, không cần GPU): `node tests/smoke.test.cjs`
 - **tests/browser-smoke.html** — harness kiểm tra game trong trình duyệt thật (stub WebGL)
 - **tests/mesh_count.cjs** — đếm mesh/vertex/material để kiểm soát hiệu năng
 
 ## Kiểm chứng
 - `node --check js/game.js` — cú pháp hợp lệ
-- `node tests/smoke.test.cjs` — **275/275 PASS**, gồm toàn bộ gameplay cũ (map 11×11, 112 NPC, 34 xe, súng/bom/cheat/truy nã/cầu/thuyền/cá mập/thời tiết/giờ/menu…) **và đồ họa mới**: sky dome + sun sprite + fog ban ngày `0xbfd0de`, ocean ≥2000 m với **sóng vertex**, 128px facade + emissiveMap về đêm + **gạch/bê tông**, tháp kính, **xe thân bo tròn ExtrudeGeometry + mâm 5 căm + lốp vân**, **cá mập trắng lớn đủ vây/mang/bụng trắng**, rig người ≥20 mảnh (mắt có tròng màu, da texture, kính râm, mũ, tóc dài), đổi phong cách **modern ↔ neon** giữ nguyên 112 NPC + 34 xe, neon có ≥50 biển hiệu + ≥20 thân cọ, fog hoàng hôn `0xff9a80` ở neon, fog đêm `0x0a0e1c`, bóng đổ bám theo người chơi; **NPC biểu cảm**: mood đa dạng, nước mắt người khóc, miệng cử động khi nói, bong bóng 😂, vest cà vạt, đèn quảng cáo đêm
+- `node tests/smoke.test.cjs` — **286/286 PASS**, gồm toàn bộ gameplay cũ (map 11×11, 112 NPC, 34 xe, súng/bom/cheat/truy nã/cầu/thuyền/cá mập/thời tiết/giờ/menu…) **và đồ họa mới**: sky dome + sun sprite + fog ban ngày `0xbfd0de`, ocean ≥2000 m với **sóng vertex**, 128px facade + emissiveMap về đêm + **gạch/bê tông**, tháp kính, **xe thân bo tròn ExtrudeGeometry + mâm 5 căm + lốp vân**, **cá mập trắng lớn đủ vây/mang/bụng trắng**, rig người ≥20 mảnh (mắt có tròng màu, da texture, kính râm, mũ, tóc dài), đổi phong cách **modern ↔ neon** giữ nguyên 112 NPC + 34 xe, neon có ≥50 biển hiệu + ≥20 thân cọ, fog hoàng hôn `0xff9a80` ở neon, fog đêm `0x0a0e1c`, bóng đổ bám theo người chơi; **NPC biểu cảm**: mood đa dạng, nước mắt người khóc, miệng cử động khi nói, bong bóng 😂, vest cà vạt, đèn quảng cáo đêm
 - Container không có GPU/WebGL nên không chụp ảnh render thật — mở link để xem trực tiếp.
 
 ## Điều khiển (giữ nguyên)
-**WASD / mũi tên** di chuyển theo hướng camera · **SHIFT** chạy · **CHUỘT** xoay camera (click để khoá) · **CLICK TRÁI** bắn/đánh · **GIỮ CHUỘT PHẢI** ngắm cận vai · **LĂN CHUỘT** zoom · **1·2·3·4·5** vũ khí (tay/dao/súng lục/AK-47/BOM) · **R** nạp đạn · **C** camera sau lưng · **E** lên/xuống/trộm xe · **~** bảng cheat (health/armor/reload) · **T** đổi thời tiết · **G** đổi giờ ngẫu nhiên · **M/☰** menu tạm dừng · cảm ứng: joystick trái + kéo phải xoay camera
+**WASD / mũi tên** di chuyển theo hướng camera · **SHIFT** chạy · **CHUỘT** xoay camera (click để khoá) · **CLICK TRÁI** bắn/đánh · **GIỮ CHUỘT PHẢI** ngắm cận vai · **LĂN CHUỘT** zoom · **1·2·3·4·5** vũ khí (tay/dao/súng lục/AK-47/BOM) · **R** nạp đạn · **C** camera sau lưng · **E** lên/xuống/trộm xe · **~** bảng cheat (health/armor/reload) · **T** đổi thời tiết · **G** đổi giờ ngẫu nhiên · **ESC / M / ☰** menu tạm dừng · cảm ứng: joystick trái + kéo phải xoay camera
+- **Nhìn mặt nhân vật**: đứng yên, nhân vật chính tự xoay người đối diện camera — xoay camera xung quanh để ngắm mặt/mắt/body từ mọi góc; người đi đường liếc nhìn bạn khi tới gần
+- **Đâm xe**: lái xe tốc độ cao đâm vào xe khác → **kính vỡ văng mảnh**, nạn nhân **bốc khói vài giây rồi NỔ** (nổ dây chuyền lan sang xe gần)
 
 ## Gameplay giữ nguyên (tóm tắt)
 Thế giới mở 385×385 m: 4 cụm đô thị cao tầng, sông + cầu nâng 1,5 m, bãi biển; 112 người đi đường (80 dân + 24 cảnh sát + 8 người bơi), 34 xe (26 dân + 8 xe cảnh sát), 11 thuyền, 6 cá mập; truy nã 1–5 sao với xe cảnh sát truy đuổi + cảnh sát nhảy xuống bắn; trộm xe có tài xế (bị đẩy ra bỏ chạy); bắn xe nổ + nổ dây chuyền; bom nổ (slot 5) parabol + nổ dây chuyền; auto-aim ±12,6°, headshot, đạn bị tường chặn; nạp đạn có thời gian; giáp; bơi sông/biển + cá mập cắn; bắn từ trong xe (drive-by); thời tiết nắng→mây→mưa→giông (chớp, sấm); giờ ngẫu nhiên SÁNG/CHIỀU/TỐI + đồng hồ GMT+7; âm thanh thủ tục WebAudio.

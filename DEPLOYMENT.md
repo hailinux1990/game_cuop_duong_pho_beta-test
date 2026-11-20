@@ -113,7 +113,7 @@ cd game_test_gta
 node tests/smoke.test.cjs
 ```
 
-All 275 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
+All 286 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
 
 ### Mobile/iPad
 - Works with touch controls
@@ -152,7 +152,7 @@ Just upload all files (`index.html`, `js/`, `lib/`, `LICENSE`) to the root direc
 - [ / ]: Mouse sensitivity down / up   ·   Y: Invert vertical look
 - 1-4: Switch weapons (fists / knife / pistol / AK-47)
 - R: Reload (timed; auto-reloads when the magazine runs dry)
-- E: Enter / exit / steal vehicles
+- E: Enter / exit / steal vehicles · ESC: pause menu
 
 **Touch:**
 - Left half: virtual joystick for movement
@@ -176,6 +176,7 @@ game_test_gta/
 - Realism pass 2: shaded skin textures + coloured irises + sleeved arms/bare forearms, woven fabric folds + denim twill + print shirts, sneakers with white soles; bevelled ExtrudeGeometry car bodies with fender bulges, raked glass canopies, treaded tires + 5-spoke alloy rims, round glowing headlights; realistic great-white sharks (full fin set, gills, white belly, crescent tail); brick/concrete facades, asphalt with cracks, sidewalk joints, grass blades, sand speckle, roof gravel, curtained night windows, readable shop signs, rolling vertex waves on ocean + river
 - Gangstar Vegas pass 3: living pedestrian faces — per-NPC moods (calm/happy/talking/laughing/crying with dripping tears + sobbing/angry/fear with wide eyes), emoji speech bubbles (😊💬😂😭😠😱) over nearby heads, laugh/sob sound cues, suit + tie civilians, glowing billboards after dark
 - Human pass 4 (real people): realistic head proportions + painted faces on the skull sphere (eye sockets, nose bridge, nostrils, lips, cheeks, brows), strand-textured hair, coloured irises over the sockets, smooth shoulder caps, rounded hips — the 3D mood rig still animates the face on top
+- Interaction pass 5: ESC opens/closes the pause menu (also via pointer-lock release); the idle hero turns to face the camera so you can inspect his face/eyes/body from the front; pedestrians glance at the hero when he walks close; ramming cars at speed shatters windshields/side windows (flying glass shards), makes the victim smoulder for a few seconds and then explode (chain reaction included)
 - Two switchable graphics styles: UNITY CITY (modern daylight, default) and VICE CITY (neon sunset)
 - Detailed 3D pedestrians (two-segment arms/legs, ears, caps/police hats, sunglasses, skirts), detailed cars (sedan/sport/SUV/taxi/police with spinning wheels, animated doors), detailed speedboats
 - Gameplay unchanged (open world 11×11 blocks, 112 NPC, 34 cars, wanted system, weapons, weather/time)
