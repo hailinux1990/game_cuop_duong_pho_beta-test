@@ -4554,19 +4554,39 @@
 
     if (moving && moveDir.lengthSq() > 0.0001) {
       moveDir.normalize();
-      npc.pos.addScaledVector(moveDir, npc.speed * dt);
+      // smooth acceleration to the desired gait instead of teleporting to it
+      if (npc.curSpeed === undefined) npc.curSpeed = 0;
+      npc.curSpeed += (npc.speed - npc.curSpeed) * Math.min(1, dt * 4);
+      const px0 = npc.pos.x, pz0 = npc.pos.z;
+      npc.pos.addScaledVector(moveDir, npc.curSpeed * dt);
       // keep on walkable ground (block sidewalks / roads), avoid buildings and
       // the open river/sea — the raised bridge deck is dry ground and allowed
       const intoWater = isInsideWater(npc.pos.x, npc.pos.z) && groundY(npc.pos.x, npc.pos.z) < 0.5;
       if (isInsideBuilding(npc.pos.x, npc.pos.z) || intoWater) {
-        npc.pos.sub(moveDir.clone().multiplyScalar(npc.speed * dt * 2));
+        npc.pos.sub(moveDir.clone().multiplyScalar(npc.curSpeed * dt * 2));
         if (npc.type !== 'police') { npc.target = null; }
       }
       clampToWorld(npc.pos);
-      npc.facing = Math.atan2(moveDir.x, moveDir.z);
-      npc.anim += dt * (npc.speed * 2.2);
+      // fluid turning: ease the body toward the walk direction, never snap
+      const wantFacing = Math.atan2(moveDir.x, moveDir.z);
+      npc.facing = angLerp(npc.facing, wantFacing, Math.min(1, dt * 7));
+      npc.anim += dt * (npc.curSpeed * 2.2);
+      // walk bob + drift detection (blocked NPCs re-pick a route instead of freezing)
+      npc.bob = Math.abs(Math.sin(npc.anim * 2)) * 0.035;
+      const moved2 = (npc.pos.x - px0) * (npc.pos.x - px0) + (npc.pos.z - pz0) * (npc.pos.z - pz0);
+      if (moved2 < 0.00002) {
+        npc.stuckT = (npc.stuckT || 0) + dt;
+        if (npc.stuckT > 1.2 && npc.type !== 'police') { npc.target = null; npc.stuckT = 0; }
+      } else {
+        npc.stuckT = 0;
+      }
+    } else {
+      npc.curSpeed = 0;
+      npc.bob = 0;
     }
-    // cars are solid for pedestrians too: walk around, never through
+    // cars are solid for pedestrians too: walk around, never through —
+    // when bumped, turn away from the car instead of pushing into it
+    let pushed = false, pushX = 1, pushZ = 0;
     for (let ci = 0; ci < cars.length; ci++) {
       const c = cars[ci];
       if (c.dead) continue;
@@ -4576,15 +4596,23 @@
       if (dd > 0.001 && dd < minD) {
         npc.pos.x = c.pos.x + dx / dd * minD;
         npc.pos.z = c.pos.z + dz / dd * minD;
+        pushed = true; pushX = dx / dd; pushZ = dz / dd;
       } else if (dd <= 0.001) {
         npc.pos.x = c.pos.x + minD;
+        pushed = true;
       }
+    }
+    if (pushed && npc.type !== 'police' && npc.state !== 'flee') {
+      npc.target = new THREE.Vector3(npc.pos.x + pushX * 3.5, 0, npc.pos.z + pushZ * 3.5);
+      npc.wanderTimer = 1.5;
     }
     npc.group.position.set(npc.pos.x, npc.pos.y, npc.pos.z);
     npc.group.rotation.y = npc.facing;
-    // pedestrians glance at the hero when he strolls close by
-    if (npc.type === 'civilian' && npc.state !== 'flee' && player && !player.dead &&
-        npc.pos.distanceTo(player.pos) < 8) {
+    // pedestrians glance at the hero when he strolls close by; otherwise
+    // they scan the street around them instead of staring stiffly ahead
+    const nearHero = npc.type === 'civilian' && npc.state !== 'flee' && player && !player.dead &&
+      npc.pos.distanceTo(player.pos) < 8;
+    if (nearHero) {
       let wantHead = Math.atan2(player.pos.x - npc.pos.x, player.pos.z - npc.pos.z) - npc.facing;
       while (wantHead > Math.PI) wantHead -= Math.PI * 2;
       while (wantHead < -Math.PI) wantHead += Math.PI * 2;
@@ -4592,7 +4620,12 @@
       if (u.head) u.head.rotation.y = Math.max(-0.9, Math.min(0.9, wantHead));
     } else {
       const u = npc.group.userData;
-      if (u.head) u.head.rotation.y = 0;
+      if (u.head) {
+        // idle: look around; walking: look along the turn with a gentle sway
+        u.head.rotation.y = moving
+          ? Math.sin(npc.anim * 0.9) * 0.18
+          : Math.sin((npc.idleT || 0) * 0.8 + (npc.pathI || 0)) * 0.5;
+      }
     }
     // limb animation: stride grows with walking / fleeing speed
     const spdK = Math.min(1, npc.speed / 4.6);
@@ -4616,7 +4649,8 @@
       npc.group.userData.armR.rotation.x = sway * 0.5;
       npc.group.userData.armL.rotation.x = -sway * 0.5;
     } else {
-      npc.group.rotation.z = 0;
+      // natural walk: torso rocks gently with the stride
+      npc.group.rotation.z = Math.sin(npc.anim) * 0.05;
     }
     updateFace(npc, dt);
   }
@@ -4855,7 +4889,6 @@
       const fwd = new THREE.Vector3(Math.sin(car.heading), 0, Math.cos(car.heading));
       car.pos.addScaledVector(fwd, car.curSpeed * dt);
       clampToWorld(car.pos);
-      collideCars(car, dt, false);       // solid bodies even for AI traffic
     }
   }
 
@@ -4884,7 +4917,48 @@
       car.pos.add(step);
       if (isInsideBuilding(car.pos.x, car.pos.z)) car.pos.sub(step);   // never clip walls
       clampToWorld(car.pos);
-      collideCars(car, dt, false);       // cruisers can't ghost through traffic
+    }
+  }
+
+  // global separation sweep: run AFTER every car has moved so queued traffic
+  // can never end a tick overlapping (a push can shove one car into another)
+  function separateCars() {
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < cars.length; i++) {
+        const a = cars[i];
+        if (a.dead) continue;
+        for (let j = i + 1; j < cars.length; j++) {
+          const b = cars[j];
+          if (b.dead) continue;
+          _carSep.set(a.pos.x - b.pos.x, 0, a.pos.z - b.pos.z);
+          let d = _carSep.length();
+          if (d < 0.001) { _carSep.set(1, 0, 0); d = 0.001; }
+          if (d >= 2.2) continue;
+          const push = (2.2 - d) / 2;
+          _carSep.normalize();
+          a.pos.addScaledVector(_carSep, push);
+          b.pos.addScaledVector(_carSep, -push);
+          clampToWorld(a.pos);
+          clampToWorld(b.pos);
+        }
+      }
+    }
+    // pedestrians stay clear of the solid car bodies too (after cars moved)
+    for (let n = 0; n < NPCs.length; n++) {
+      const npc = NPCs[n];
+      if (npc.dead || npc.swim) continue;
+      for (let j = 0; j < cars.length; j++) {
+        const c = cars[j];
+        if (c.dead) continue;
+        const dx = npc.pos.x - c.pos.x, dz = npc.pos.z - c.pos.z;
+        const dd = Math.hypot(dx, dz);
+        if (dd > 0.001 && dd < 1.25) {
+          npc.pos.x = c.pos.x + dx / dd * 1.25;
+          npc.pos.z = c.pos.z + dz / dd * 1.25;
+        } else if (dd <= 0.001) {
+          npc.pos.x = c.pos.x + 1.25;
+        }
+      }
     }
   }
 
@@ -6078,6 +6152,7 @@
       if (!player.dead) updatePlayer(FIXED_STEP);
       NPCs.forEach(n => updateNPC(n, FIXED_STEP));
       cars.forEach(c => updateCar(c, FIXED_STEP));
+      separateCars();
       boats.forEach(b => updateBoat(b, FIXED_STEP));
       sharks.forEach(sh => updateShark(sh, FIXED_STEP));
       bombs.slice().forEach(b => updateBomb(b, FIXED_STEP));
@@ -6108,9 +6183,9 @@
       if (!c.dead && c.doorT) updateCarDoor(c, dt);
     });
 
-    // walking characters follow the bridge decks / ramps too
+    // walking characters follow the bridge decks / ramps too (+ gentle walk bob)
     NPCs.forEach(n => {
-      if (!n.dead && !n.swim) n.group.position.y = groundY(n.pos.x, n.pos.z);
+      if (!n.dead && !n.swim) n.group.position.y = groundY(n.pos.x, n.pos.z) + (n.bob || 0);
     });
 
     updateFX(dt);

@@ -67,6 +67,7 @@ Chuyển phong cách bất cứ lúc nào — cả thế giới dựng lại, **
 - **Nhìn mặt nhân vật**: đứng yên, nhân vật chính tự xoay người đối diện camera — xoay camera xung quanh để ngắm mặt/mắt/body từ mọi góc; người đi đường liếc nhìn bạn khi tới gần
 - **Đâm xe**: lái xe tốc độ cao đâm vào xe khác → **kính vỡ văng mảnh**, xe bị đâm **dừng lại**, **bốc khói vài giây rồi NỔ** (nổ dây chuyền lan sang xe gần)
 - **Giao thông thật**: mọi xe là **khối đặc** — không xe nào chui xuyên xe khác; xe AI **phanh xếp hàng sau xe phía trước** và **vòng tránh** xe chắn đường; **người đi bộ không đi xuyên được ô tô** (đi vòng); tất cả xe chạy đúng **làn phải**
+- **NPC đi đứng tự nhiên**: xoay người **mượt mà** (không quay ngoắt), **tăng/giảm tốc từ từ**, **nhún nhẹ theo nhịp bước**, thân lắc nhẹ khi đi; đứng yên thì **nhìn quanh quét mắt** thay vì đơ cứng; bị xe chắn thì **tự chuyển hướng** thay vì đứng ỳ
 
 ## Gameplay giữ nguyên (tóm tắt)
 Thế giới mở 385×385 m: 4 cụm đô thị cao tầng, sông + cầu nâng 1,5 m, bãi biển; 112 người đi đường (80 dân + 24 cảnh sát + 8 người bơi), 34 xe (26 dân + 8 xe cảnh sát), 11 thuyền, 6 cá mập; truy nã 1–5 sao với xe cảnh sát truy đuổi + cảnh sát nhảy xuống bắn; trộm xe có tài xế (bị đẩy ra bỏ chạy); bắn xe nổ + nổ dây chuyền; bom nổ (slot 5) parabol + nổ dây chuyền; auto-aim ±12,6°, headshot, đạn bị tường chặn; nạp đạn có thời gian; giáp; bơi sông/biển + cá mập cắn; bắn từ trong xe (drive-by); thời tiết nắng→mây→mưa→giông (chớp, sấm); giờ ngẫu nhiên SÁNG/CHIỀU/TỐI + đồng hồ GMT+7; âm thanh thủ tục WebAudio.

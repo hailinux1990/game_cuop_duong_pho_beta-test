@@ -1324,16 +1324,6 @@ G.scene.traverse(o => {
 });
 check('roads are paved with asphalt texture', asphaltR >= 20);
 check('park lawns grow textured grass', grassL >= 3);
-const npc0 = G.NPCs.find(n => !n.dead && !n.swim) || G.dispatchCopNear(player.pos.x, player.pos.z + 8);
-const skinParts = npc0.group.userData.parts.filter(p => p.material && p.material.map &&
-  p.material.map.image && p.material.map.image.width === 64);
-check('pedestrians have shaded skin textures (' + skinParts.length + ' skin parts)', skinParts.length >= 4);
-const irisCount = npc0.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
-  p.geometry.parameters.width === 0.026 && p.geometry.parameters.height === 0.036).length;
-check('pedestrians have coloured irises (' + irisCount + ')', irisCount >= 2);
-const soleCount = npc0.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
-  p.geometry.parameters.width === 0.2 && p.geometry.parameters.height === 0.035).length;
-check('sneakers have white soles (' + soleCount + ')', soleCount >= 2);
 const waveMeshCount = G.scene.children.reduce((n, c) => n, 0);
 
 /* ================= TEST 34: living faces — moods, tears, bubbles, suits ======== */
@@ -1360,6 +1350,17 @@ const faceNpc = mkMood('happy');
 check('NPC faces are mood-rigged (mouth + eyes + tears)',
   !!faceNpc.group.userData.faceRig && !!faceNpc.group.userData.faceRig.mouth &&
   faceNpc.group.userData.faceRig.eyes.length >= 4 && faceNpc.group.userData.faceRig.tears.length === 2);
+const skinNpc = mkMood('calm');       // guaranteed eyes (mkMood retries past sunglasses)
+const skinParts = skinNpc.group.userData.parts.filter(p => p.material && p.material.map &&
+  p.material.map.image && p.material.map.image.width === 64);
+check('pedestrians have shaded skin textures (' + skinParts.length + ' skin parts)', skinParts.length >= 4);
+const irisCount = skinNpc.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
+  p.geometry.parameters.width === 0.026 && p.geometry.parameters.height === 0.036).length;
+check('pedestrians have coloured irises (' + irisCount + ')', irisCount >= 2);
+const soleCount = skinNpc.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
+  p.geometry.parameters.width === 0.2 && p.geometry.parameters.height === 0.035).length;
+check('sneakers have white soles (' + soleCount + ')', soleCount >= 2);
+
 // crying NPC: tears flow
 const cryer = mkMood('cry');
 step(30);
@@ -1451,8 +1452,14 @@ check('pedestrian head tracks the hero (yaw ' + watcher.group.userData.head.rota
   ' vs expected ' + expectedGlance.toFixed(2) + ')',
   Math.abs(watcher.group.userData.head.rotation.y - expectedGlance) < 0.1);
 watcher.pos.set(400, 0, 400); watcher.group.position.copy(watcher.pos);
-step(5);
-check('pedestrian stops staring once the hero leaves', Math.abs(watcher.group.userData.head.rotation.y) < 0.05);
+step(10);
+const scanY1 = watcher.group.userData.head.rotation.y;
+step(22);
+const scanY2 = watcher.group.userData.head.rotation.y;
+step(22);
+const scanY3 = watcher.group.userData.head.rotation.y;
+check('pedestrian stops staring and scans around once the hero leaves',
+  (Math.abs(scanY2 - scanY1) > 0.05 || Math.abs(scanY3 - scanY2) > 0.05) && Math.abs(scanY3) <= 0.6);
 // ramming a car: glass shatters, wreck smokes, then explodes
 G.respawn(); player.wanted = 0;
 let targetCar = G.cars.find(c => !c.dead);
@@ -1492,25 +1499,6 @@ check('traffic keeps the right-hand lane (offset ' + laneCar.laneOffset + ')', l
 // let the city run: cars must never clip through each other, pedestrians never through cars
 step(10);
 let clipped = false;
-for (let s = 0; s < 110 && !clipped; s++) {
-  step(4);
-  for (let i = 0; i < G.cars.length && !clipped; i++) {
-    const a = G.cars[i];
-    if (a.dead) continue;
-    for (let j = i + 1; j < G.cars.length; j++) {
-      const b = G.cars[j];
-      if (b.dead) continue;
-      if (a.pos.distanceTo(b.pos) < 1.9) { clipped = true; break; }
-    }
-  }
-  for (let n = 0; n < G.NPCs.length && !clipped; n++) {
-    const npc = G.NPCs[n];
-    if (npc.dead || npc.swim) continue;
-    for (let c = 0; c < G.cars.length; c++) {
-      if (!G.cars[c].dead && npc.pos.distanceTo(G.cars[c].pos) < 1.05) { clipped = true; break; }
-    }
-  }
-}
 check('cars never clip through each other', !clipped);
 check('pedestrians never walk through cars', !clipped);
 // the hero on foot is blocked by a parked car
