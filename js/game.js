@@ -6433,7 +6433,7 @@
      street gang, steal a marked car and deliver it, or reach a meeting
      point. The objective is always on screen; press M for the full panel. */
   const MISSION_DEFS = [
-    { type: 'kill', title: 'DỌN DẸP BĂNG ĐẢNG', icon: '🔫', desc: 'Tiêu diệt {need} tên côn đồ. Vòng tròn vàng + mũi tên chỉ thẳng vào tên côn đồ sống gần nhất — chấm đỏ trên minimap, HUD hiện số tên còn lại.' },
+    { type: 'kill', title: 'DỌN DẸP BĂNG ĐẢNG', icon: '🔫', desc: 'Tiêu diệt {need} tên côn đồ. Mũi tên vàng trên minimap chỉ thẳng vào tên côn đồ sống gần nhất — chấm đỏ trên minimap, HUD hiện số tên còn lại.' },
     { type: 'steal', title: 'LẤY XE HÀNG', icon: '🚗', desc: 'Trộm chiếc xe được đánh dấu, sau đó theo mũi tên vàng trên minimap lái xe vào vòng tròn giao hàng (HUD hiện khoảng cách còn lại).' },
     { type: 'visit', title: 'ĐIỂM HẸN', icon: '📍', desc: 'Theo mũi tên vàng trên minimap tới vòng tròn được đánh dấu (đi bộ hoặc lái xe).' }
   ];
@@ -6477,24 +6477,9 @@
     mission.beacon = g;
   }
 
-  // the floating GPS arrow in front of the hero, always pointing at the objective
-  function spawnNavArrow() {
-    const g = new THREE.Group();
-    const coneM = new THREE.MeshBasicMaterial({ color: 0xffd25e });
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.25, 4), coneM);
-    cone.rotation.z = -Math.PI / 2;              // point along +X (horizontal)
-    cone.position.x = 0.62;
-    g.add(cone);
-    g.userData.navArrow = true;
-    g.visible = false;
-    scene.add(g);
-    mission.navArrow = g;
-  }
-
   function clearMissionMarkers() {
     if (!mission) return;
     if (mission.beacon) { scene.remove(mission.beacon); mission.beacon = null; }
-    if (mission.navArrow) { scene.remove(mission.navArrow); mission.navArrow = null; }
   }
 
   // reinforcements keep every kill-mission completable: there is ALWAYS
@@ -6520,7 +6505,7 @@
     mission = {
       type: def.type, title: def.title, icon: def.icon, desc: def.desc,
       need: 0, progress: 0, target: null, car: null, carTaken: false,
-      active: true, nextT: 0, beacon: null, navArrow: null
+      active: true, nextT: 0, beacon: null
     };
     if (def.type === 'kill') {
       mission.need = 4 + (missionsDone % 2);
@@ -6549,7 +6534,6 @@
     }
     mission.desc = def.desc.replace('{need}', mission.need);
     spawnMissionBeacon();
-    spawnNavArrow();
     updateMissionHUD();
     updateMissionPanel();
     toast('NHIỆM VỤ MỚI — ' + mission.icon + ' ' + mission.title + ' (ấn M để xem)');
@@ -6596,7 +6580,7 @@
       const alive = livingEnemies();
       if (alive.length === 0) {
         for (let i = 0; i < 2; i++) spawnGangMember(null);
-        toast('Băng đảng tiếp viện đang tới — theo mũi tên vàng!');
+        toast('Băng đảng tiếp viện đang tới — theo mũi tên vàng trên bản đồ!');
       } else {
         let best = null, bd = 1e9;
         alive.forEach(n => {
@@ -6609,7 +6593,7 @@
       if (mission.car && mission.car.dead) { failMission('chiếc xe hàng đã bị phá huỷ'); return; }
       if (!mission.carTaken && player.inCar === mission.car) {
         mission.carTaken = true;
-        toast('Đã lấy xe! Theo mũi tên vàng tới vòng tròn giao hàng.');
+        toast('Đã lấy xe! Theo mũi tên vàng trên bản đồ tới vòng tròn giao hàng.');
         updateMissionHUD();
       }
       if (mission.carTaken && player.inCar === mission.car && player.pos.distanceTo(mission.target) < 8) {
@@ -6626,21 +6610,6 @@
         mission.beacon.position.set(t.x, 0.2 + Math.sin(performance.now() / 420) * 0.5, t.z);
         mission.beacon.rotation.y += dt * 1.3;
       } else mission.beacon.visible = false;
-    }
-    // navigation arrow: hovers in front of the hero pointing at the objective
-    if (mission.navArrow) {
-      const t = missionTargetPos();
-      if (t) {
-        mission.navArrow.visible = true;
-        const dx = t.x - player.pos.x, dz = t.z - player.pos.z;
-        const dd = Math.hypot(dx, dz) || 1;
-        mission.navArrow.rotation.y = Math.atan2(dx, dz);
-        mission.navArrow.position.set(
-          player.pos.x + (dx / dd) * 2.6,
-          groundY(player.pos.x, player.pos.z) + 2.7 + Math.sin(performance.now() / 300) * 0.35,
-          player.pos.z + (dz / dd) * 2.6
-        );
-      } else mission.navArrow.visible = false;
     }
     updateMissionHUD();                      // live progress / remaining thugs / distance
   }
@@ -6685,7 +6654,7 @@
       if (mission.type === 'kill') {
         const alive = livingEnemies().length;
         missionProgressEl.textContent = 'TIẾN ĐỘ: ' + mission.progress + '/' + mission.need +
-          ' tên đã bị hạ · còn ' + alive + ' tên côn đồ (theo mũi tên vàng)';
+          ' tên đã bị hạ · còn ' + alive + ' tên côn đồ (theo mũi tên trên minimap)';
       } else {
         missionProgressEl.textContent = mission.active ? 'TIẾN ĐỘ: đang thực hiện — theo mũi tên vàng trên bản đồ' : 'TIẾN ĐỘ: đã kết thúc';
       }
