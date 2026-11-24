@@ -1608,8 +1608,14 @@ check('ESC closes the mission panel too', G.missionPanelOpen === false && G.paus
 // ---- kill-mission progress ----
 const km = G.forceMission('kill');
 check('kill mission hunts the gang (' + km.need + ' targets)', km.type === 'kill' && km.need >= 4);
+check('kill mission guarantees enough targets', G.livingEnemies().length >= km.need);
 check('the objective beacon floats in the world', !!km.beacon);
 check('mission HUD shows the objective', els.missionHudText.textContent.indexOf('BĂNG ĐẢNG') >= 0);
+step(2);
+check('mission HUD shows the remaining thug count', els.missionHudText.textContent.indexOf('còn') >= 0);
+check('the ring sits ON a living thug',
+  G.livingEnemies().some(n => n.pos.distanceTo(km.target) < 2));
+check('the GPS arrow points at the objective', km.navArrow && km.navArrow.visible === true);
 const kmBefore = km.progress;
 const kmVictim = G.spawnEnemyNear(player.pos.x, player.pos.z);
 kmVictim.pos.set(player.pos.x + 3, 0, player.pos.z);
@@ -1618,17 +1624,32 @@ G.damageNPC(kmVictim, 999, kmVictim.pos.clone().setY(1.0), new THREE.Vector3(1, 
 step(2);
 check('killing a thug advances the mission (' + km.progress + '/' + km.need + ')', km.progress === kmBefore + 1);
 
+// ---- the gang never runs dry: wiped out mid-mission -> reinforcements ----
+const rm = G.forceMission('kill');
+rm.need = 999;                                   // stretch the target so it cannot finish early
+G.livingEnemies().forEach(n => G.damageNPC(n, 999, n.pos.clone().setY(1.0), new THREE.Vector3(1, 0, 0)));
+step(3);
+check('the gang sends reinforcements when wiped out', G.livingEnemies().length >= 2);
+rm.need = 4;                                     // restore a sane target for the next missions
+
 // ---- steal-and-deliver mission ----
 const sm = G.forceMission('steal');
 check('steal mission marks a civilian car', sm.type === 'steal' && sm.car && !sm.car.isPolice);
+check('the GPS arrow shows for the marked car', !!sm.navArrow);
 const sCar = sm.car;
 G.cars.forEach(c => { if (c !== sCar && !c.dead) { c.pos.set(400, 0, 400); c.group.position.copy(c.pos); c.prevPos.copy(c.pos); } });
 sCar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
 sCar.group.position.copy(sCar.pos);
-sm.target.set(player.pos.x + 5, 0, player.pos.z);
+sm.target.set(player.pos.x + 40, 0, player.pos.z + 40);
 step(2);
 key('KeyF'); step(2);
 check('the hero steals the marked car', player.inCar === sCar && sm.carTaken === true);
+step(2);
+check('steal HUD shows the remaining distance (' + els.missionHudText.textContent + ')',
+  els.missionHudText.textContent.indexOf('m)') >= 0);
+check('the nav arrow follows the car to the ring',
+  sm.navArrow && sm.navArrow.visible === true &&
+  Math.abs(sm.navArrow.rotation.y - Math.atan2(sm.target.x - player.pos.x, sm.target.z - player.pos.z)) < 0.2);
 sCar.pos.set(sm.target.x, 0, sm.target.z);
 player.pos.copy(sCar.pos);
 step(4);
@@ -1639,6 +1660,8 @@ check('the hero exits the delivered car', player.inCar === null);
 // ---- meeting-point mission ----
 const meetM = G.forceMission('visit');
 check('visit mission marks a meeting point', meetM.type === 'visit' && !!meetM.target);
+step(2);
+check('visit HUD shows the remaining distance', els.missionHudText.textContent.indexOf('m)') >= 0);
 player.pos.set(meetM.target.x, 0, meetM.target.z);
 player.group.position.copy(player.pos);
 step(3);
