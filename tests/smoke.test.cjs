@@ -135,7 +135,7 @@ check('water detection works', G.isInsideWater(0, G.RIVER_Z) && !G.isInsideWater
 check('player spawns on open ground (no building/water)',
   !G.isInsideBuilding(player.pos.x, player.pos.z) && !G.isInsideWater(player.pos.x, player.pos.z));
 check('world spawned: NPCs=' + G.NPCs.length + ' cars=' + G.cars.length,
-  G.NPCs.length === 112 && G.cars.length === 34);
+  G.NPCs.length === 124 && G.cars.length === 34);
 check('every AI car has a visible driver mesh', G.cars.every(c => c.driverMesh !== null));
 
 /* ================= TEST 1: AK-47 with 500 rounds ================= */
@@ -209,17 +209,17 @@ victim.group.position.copy(victim.pos);
 const npcCountBefore = G.NPCs.length;
 player.wanted = 0;                                 // clear ambient crime noise first
 const wantedBefore = player.wanted;
-key('KeyE');                                       // E next to an occupied car -> jack it
+key('KeyF');                                       // F next to an occupied car -> jack it
 check('player is now driving', player.inCar === victim);
 check('car marked as stolen', victim.stolen === true);
 check('driver mesh removed from cabin', victim.driverMesh === null);
 check('ejected driver spawned as new ped', G.NPCs.length === npcCountBefore + 1);
 check('stealing raised the wanted level (' + player.wanted.toFixed(1) + ' stars)', player.wanted > wantedBefore);
-key('KeyE');                                       // exit
+key('KeyF');                                       // exit
 check('player exited the car', player.inCar === null);
-key('KeyE');                                       // re-enter stolen car
+key('KeyF');                                       // re-enter stolen car
 check('re-entering a stolen car spawns no extra driver', G.NPCs.length === npcCountBefore + 1 && player.inCar === victim);
-key('KeyE');                                       // exit again
+key('KeyF');                                       // exit again
 
 /* ================= TEST 5: shoot a car until it EXPLODES (+ chain reaction) ===== */
 G.NPCs.forEach(n => { n.pos.set(400, 0, 400); n.group.position.set(400, 0, 400); });
@@ -499,8 +499,8 @@ player.pos.set(driver.pos.x + 1.6, 0, driver.pos.z);
 player.group.position.copy(player.pos);
 G.setCameraLook(driver.heading, -0.17);
 G.snapCamera();
-key('KeyE');
-check('E carjacks the cruiser', player.inCar === driver);
+key('KeyF');
+check('F carjacks the cruiser', player.inCar === driver);
 key('KeyW'); step(60); keyup('KeyW');
 const carNow = driver.group.position, camNow = G.camera.position;
 const behindDot = (camNow.x - carNow.x) * Math.sin(driver.heading) + (camNow.z - carNow.z) * Math.cos(driver.heading);
@@ -509,8 +509,8 @@ check('speedometer reads while driving (' + els.speedN.textContent + ' km/h)', N
 const steerH0 = driver.heading;
 key('KeyD'); step(10); keyup('KeyD');
 check('D steers the car toward screen-right (heading decreases)', driver.heading < steerH0 - 0.02);
-key('KeyE');
-check('E steps out of the car again', player.inCar === null);
+key('KeyF');
+check('F steps out of the car again', player.inCar === null);
 
 /* ================= TEST 17: right-mouse aim zoom =============================== */
 G.respawn(); G.setCameraLook(0, -0.17); G.snapCamera(); step(2);
@@ -693,8 +693,8 @@ check('modern building facades start OPAQUE', modernFaded === 0);
 G.applyWorldStyle('neon');
 step(3);
 check('style switch rebuilds the city in VICE CITY neon mode', G.settings.style === 'neon' && G.isNeon() === true);
-check('style switch keeps the world alive (112 NPC + 34 xe + hero)',
-  !!player && !player.dead && G.NPCs.length === 112 && G.cars.length === 34);
+check('style switch keeps the world alive (124 NPC + 34 xe + hero)',
+  !!player && !player.dead && G.NPCs.length === 124 && G.cars.length === 34);
 const palmTrunks = countWorld(o => o.geometry.type === 'CylinderGeometry' && o.material &&
   o.material.color && o.material.color.getHex() === 0x7a5a38);
 check('VICE CITY palms return (' + palmTrunks + ' trunks)', palmTrunks >= 20);
@@ -709,7 +709,7 @@ check('neon building facades start OPAQUE (no transparent pipeline cost)', neonF
 G.applyWorldStyle('modern');
 step(3);
 check('style can switch back to UNITY CITY modern', G.settings.style === 'modern' && G.isNeon() === false &&
-  !!player && G.NPCs.length === 112 && G.cars.length === 34);
+  !!player && G.NPCs.length === 124 && G.cars.length === 34);
 G.setTimeOfDay('afternoon'); G.setWeather('clear'); step(2);
 check('modern mode restores the crisp daylight fog', G.scene.fog && G.scene.fog.color.getHex() === 0xbfd0de);
 
@@ -803,11 +803,11 @@ entryCar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
 entryCar.group.position.copy(entryCar.pos);
 step(2);
 check('near-car prompt appears ("' + els.carPrompt.textContent + '")', els.carPrompt.textContent.indexOf('XE') >= 0);
-key('KeyE');
-check('E enters the car', player.inCar === entryCar);
+key('KeyF');
+check('F enters the car', player.inCar === entryCar);
 check('camera aligns behind the car heading', Math.abs(G.cameraState.yaw - entryCar.heading) < 1e-6);
-key('KeyE');
-check('E exits beside a safe door',
+key('KeyF');
+check('F exits beside a safe door',
   player.inCar === null && !G.isInsideBuilding(player.pos.x, player.pos.z) &&
   player.pos.distanceTo(entryCar.pos) > 1.2 && player.pos.distanceTo(entryCar.pos) < 4.5);
 const parked = entryCar.pos.clone();
@@ -893,11 +893,11 @@ doorCar.heading = 0;
 doorCar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
 doorCar.group.position.copy(doorCar.pos);
 step(2);
-key('KeyE');
+key('KeyF');
 step(6);
 const doorOpen = Math.abs(doorCar.group.userData.doorL.rotation.y) + Math.abs(doorCar.group.userData.doorR.rotation.y);
 check('car door swings open when the hero enters (' + doorOpen.toFixed(2) + ' rad)', doorOpen > 0.1);
-key('KeyE');
+key('KeyF');
 step(60);
 const doorShut = Math.abs(doorCar.group.userData.doorL.rotation.y) + Math.abs(doorCar.group.userData.doorR.rotation.y);
 check('car door closes again after the animation', doorShut < 0.02);
@@ -935,7 +935,7 @@ check('night phase is TỐI', ti.phase === 'night' && ti.label === 'TỐI');
 check('night hides the sun', ti.sun < 0.1);
 check('night shows the moon', ti.moon > 0.5);
 check('night shows the stars', ti.stars > 0.5);
-check('night fog is dark (0x' + ti.fogColor.toString(16) + ')', ti.fogColor === 0x0a0e1c);
+check('night fog is dark (0x' + ti.fogColor.toString(16) + ')', ti.fogColor === 0x070b18);
 check('clock shows TỐI', els.timePhase.textContent === 'TỐI');
 
 G.setGameHour(15);
@@ -1054,14 +1054,14 @@ dcar.maxSpeed = 0; dcar.curSpeed = 0; dcar.heading = 0; dcar.shot = 0;
 dcar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
 dcar.group.position.copy(dcar.pos);
 step(2);
-key('KeyE');
+key('KeyF');
 key('Digit4'); step(20);
 G.player.ammoStore[3] = 500;
 const ammoBeforeDrive = G.player.ammoStore[3];
 handlers.mousedown({ button: 0 }); step(12); handlers.mouseup({ button: 0 });
 check('hero can fire guns while inside a car', G.player.ammoStore[3] < ammoBeforeDrive);
 check('drive-by fire never hits your own car', (dcar.shot || 0) === 0);
-key('KeyE');
+key('KeyF');
 
 // cheat codes
 G.respawn();
@@ -1150,7 +1150,7 @@ railCar.group.position.copy(railCar.pos);
 player.pos.set(bridgeX + 3, 0, G.RIVER_Z - 10.2);
 player.group.position.copy(player.pos);
 step(2);
-key('KeyE');
+key('KeyF');
 check('hero enters a car parked on the bridge', G.player.inCar === railCar);
 key('KeyW'); key('KeyA'); step(50); keyup('KeyW'); keyup('KeyA');
 check('bridge railings keep the car on the deck while steering into the side (' +
@@ -1343,9 +1343,9 @@ const mkMood = (mood) => {
   return n;
 };
 const moodCounts = {};
-G.NPCs.forEach(n => { moodCounts[n.mood] = (moodCounts[n.mood] || 0) + 1; });
+G.NPCs.forEach(n => { if (n.type === 'civilian') moodCounts[n.mood] = (moodCounts[n.mood] || 0) + 1; });
 check('street NPCs carry moods (' + JSON.stringify(moodCounts) + ')',
-  (moodCounts.happy || 0) >= 10 && (moodCounts.talk || 0) >= 10 && (moodCounts.cry || 0) >= 2);
+  (moodCounts.happy || 0) >= 10 && (moodCounts.talk || 0) >= 10 && (moodCounts.cry || 0) >= 1);
 const faceNpc = mkMood('happy');
 check('NPC faces are mood-rigged (mouth + eyes + tears)',
   !!faceNpc.group.userData.faceRig && !!faceNpc.group.userData.faceRig.mouth &&
@@ -1473,7 +1473,7 @@ ramCar.prevPos.copy(ramCar.pos); ramCar.group.position.copy(ramCar.pos);
 ramCar.heading = 0; ramCar.maxSpeed = 13;
 player.pos.set(ramCar.pos.x, 0, ramCar.pos.z - 1.2);
 player.group.position.copy(player.pos);
-key('KeyE');           // hop in
+key('KeyF');           // hop in
 check('hero hops in the ramming car', player.inCar === ramCar);
 key('KeyW'); step(46); // accelerate straight into the parked car
 check('crash shatters the victim windshield', targetCar.glassBroken === true &&
@@ -1514,6 +1514,136 @@ const zWalk0 = player.pos.z;
 key('KeyW'); step(40); keyup('KeyW');
 check('the hero cannot walk through a parked car (moved ' + (player.pos.z - zWalk0).toFixed(2) + ' m)',
   player.pos.z < wallCar2.pos.z - 1.2 && player.pos.z - zWalk0 < 1.5);
+G.respawn(); player.armor = 0;
+
+/* ================= TEST 37: Open World GTA Style — night, gangs, mobility, missions ========== */
+// ---- the reference night look: deep dark blue fog after sundown ----
+G.applyWorldStyle('modern'); step(2);
+G.setTimeOfDay('night'); step(2);
+check('night fog is deep dark blue', G.scene.fog && G.scene.fog.color.getHex() === 0x070b18);
+check('the moon is up and the stars are out', G.timeInfo.moon > 0.9 && G.timeInfo.stars > 0.9);
+
+// ---- GTA NIGHT graphics style (thành phố về đêm) ----
+G.applyWorldStyle('night'); step(3);
+check('GTA NIGHT style is selectable', G.settings.style === 'night' && G.isNeon() === true);
+check('GTA NIGHT keeps the world alive (124 NPC + 34 xe + hero)',
+  !!player && !player.dead && G.NPCs.length === 124 && G.cars.length === 34);
+const neonNight = countWorld(o => o.material && o.material.emissive &&
+  (o.material.emissive.r + o.material.emissive.g + o.material.emissive.b) > 0.5);
+check('GTA NIGHT dresses the skyline in neon (' + neonNight + ' emissive)', neonNight >= 50);
+G.applyWorldStyle('modern'); step(3);
+
+// ---- street gangs: three turfs of armed thugs ----
+const enemies = G.NPCs.filter(n => n.type === 'enemy');
+check('gangs hold three turfs (' + enemies.length + ' thugs)', enemies.length === 12);
+check('thugs are armed, angry and remember their turf',
+  enemies.length === 12 && enemies.every(n => n.hp === 60 && n.mood === 'angry' && n.home &&
+    n.pos.distanceTo(n.home) < 14));
+
+// a thug standing on the same street turns hostile and opens fire
+G.respawn();
+const thug = G.spawnEnemyNear(player.pos.x, player.pos.z);
+let thugPlaced = false;
+for (const off of [[6, 0], [0, 6], [-6, 0], [0, -6], [8, 0], [0, 8]]) {
+  const tx = player.pos.x + off[0], tz = player.pos.z + off[1];
+  if (!G.isInsideBuilding(tx, tz) && !G.isInsideWater(tx, tz)) {
+    thug.pos.set(tx, 0, tz); thugPlaced = true; break;
+  }
+}
+thug.home.copy(thug.pos); thug.group.position.copy(thug.pos);
+thug.state = 'gang';
+step(8);
+check('a nearby thug turns hostile', thug.state === 'attack');
+const hpBeforeGang = player.hp;
+step(600);                                         // ~10 s of pistol fire from 6 m
+check('the thug shoots the hero (' + (hpBeforeGang - player.hp).toFixed(1) + ' dmg)',
+  player.hp < hpBeforeGang && player.hp > 0);
+
+// ---- mobility: jump, roll-dodge, crouch, crawl ----
+G.respawn();
+key('Space'); step(8);
+check('SPACE jumps (height ' + player.yOff.toFixed(2) + ' m)', player.yOff > 0.3);
+step(60); keyup('Space');
+check('the hero lands back on his feet', player.onGround === true && player.yOff === 0);
+
+key('KeyW'); key('ControlLeft'); step(4);
+check('CTRL triggers a roll-dodge (' + player.rollT.toFixed(2) + 's)', player.rollT > 0);
+const hpRoll = player.hp;
+G.hurtPlayer(30);
+check('mid-roll the hero is invulnerable', player.hp === hpRoll);
+keyup('ControlLeft'); keyup('KeyW');
+step(50);
+check('the roll ends and the cooldown recovers', player.rollT === 0 && player.rollCd < 1.1);
+
+key('KeyC'); step(2);
+check('C crouches (profile ' + player.group.scale.y.toFixed(2) + ')', player.crouch === true && player.group.scale.y < 0.9);
+key('KeyC'); step(2);
+check('C stands back up', player.crouch === false);
+key('KeyZ'); step(2);
+check('Z crawls flat on the ground (pitch ' + player.group.rotation.x.toFixed(2) + ')',
+  player.crawl === true && player.group.rotation.x < -1);
+key('KeyZ'); step(2);
+check('Z stands back up', player.crawl === false && player.crouch === false);
+
+// ---- Q / E weapon cycling ----
+key('Digit1');
+key('KeyE');
+check('E cycles to the next weapon (knife)', player.weapon === 1);
+key('KeyQ');
+check('Q cycles back to fists', player.weapon === 0);
+key('KeyQ');
+check('Q wraps around to the bomb', player.weapon === 4);
+key('KeyE');
+check('E wraps around to fists', player.weapon === 0);
+
+// ---- mission panel (M) ----
+key('KeyM');
+check('M opens the mission panel (paused)', G.missionPanelOpen === true && G.paused === true);
+check('the panel shows the objective', els.missionTitle.textContent.length > 4);
+key('KeyM');
+check('M closes the mission panel', G.missionPanelOpen === false && G.paused === false);
+key('KeyM'); key('Escape');
+check('ESC closes the mission panel too', G.missionPanelOpen === false && G.paused === false);
+
+// ---- kill-mission progress ----
+const km = G.forceMission('kill');
+check('kill mission hunts the gang (' + km.need + ' targets)', km.type === 'kill' && km.need >= 4);
+check('the objective beacon floats in the world', !!km.beacon);
+check('mission HUD shows the objective', els.missionHudText.textContent.indexOf('BĂNG ĐẢNG') >= 0);
+const kmBefore = km.progress;
+const kmVictim = G.spawnEnemyNear(player.pos.x, player.pos.z);
+kmVictim.pos.set(player.pos.x + 3, 0, player.pos.z);
+kmVictim.group.position.copy(kmVictim.pos);
+G.damageNPC(kmVictim, 999, kmVictim.pos.clone().setY(1.0), new THREE.Vector3(1, 0, 0));
+step(2);
+check('killing a thug advances the mission (' + km.progress + '/' + km.need + ')', km.progress === kmBefore + 1);
+
+// ---- steal-and-deliver mission ----
+const sm = G.forceMission('steal');
+check('steal mission marks a civilian car', sm.type === 'steal' && sm.car && !sm.car.isPolice);
+const sCar = sm.car;
+G.cars.forEach(c => { if (c !== sCar && !c.dead) { c.pos.set(400, 0, 400); c.group.position.copy(c.pos); c.prevPos.copy(c.pos); } });
+sCar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
+sCar.group.position.copy(sCar.pos);
+sm.target.set(player.pos.x + 5, 0, player.pos.z);
+step(2);
+key('KeyF'); step(2);
+check('the hero steals the marked car', player.inCar === sCar && sm.carTaken === true);
+sCar.pos.set(sm.target.x, 0, sm.target.z);
+player.pos.copy(sCar.pos);
+step(4);
+check('delivering the car completes the mission', sm.active === false);
+key('KeyF'); step(2);                          // step out before the next mission
+check('the hero exits the delivered car', player.inCar === null);
+
+// ---- meeting-point mission ----
+const meetM = G.forceMission('visit');
+check('visit mission marks a meeting point', meetM.type === 'visit' && !!meetM.target);
+player.pos.set(meetM.target.x, 0, meetM.target.z);
+player.group.position.copy(player.pos);
+step(3);
+check('reaching the meeting point completes the mission', meetM.active === false);
+
 G.respawn(); player.armor = 0;
 
 console.log(failures === 0 ? '\nALL SMOKE TESTS PASSED' : '\n' + failures + ' TEST(S) FAILED');

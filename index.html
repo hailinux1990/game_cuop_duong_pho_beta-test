@@ -65,6 +65,12 @@
   #clockSub { font-size:10px; letter-spacing:2px; color:#ffb8dd; margin-top:2px; }
   #clockSub #weatherLabel { color:#ffd25e; }
   #lightning { position:fixed; inset:0; z-index:7; pointer-events:none; background:#fff; opacity:0; }
+  /* ---- Mission objective (Open World GTA Style) ---- */
+  #missionHud { top:66px; left:50%; transform:translateX(-50%); text-align:center; padding:6px 16px; border:2px solid #000; background:rgba(18,8,26,.66); box-shadow:0 0 0 2px rgba(255,210,94,.55); }
+  #missionHudText { font-size:13px; letter-spacing:1px; color:#ffd25e; text-shadow:2px 2px 0 #000; }
+  .mTitle { font-size:20px; letter-spacing:2px; color:var(--ui); margin-bottom:10px; }
+  .mDesc { font-size:14px; line-height:1.7; color:#eee; letter-spacing:1px; margin-bottom:10px; text-align:left; }
+  .mProg { font-size:13px; letter-spacing:2px; color:var(--cyan); margin-bottom:12px; }
   /* ---- Minimap ---- */
   #minimapBox { top:14px; right:14px; border:2px solid #000; box-shadow:0 0 0 2px rgba(255,111,181,.55); background:#000; }
   #minimap { display:block; image-rendering: pixelated; }
@@ -143,6 +149,7 @@
     <span class="wslot" data-w="2"><span class="key">3</span>🔫 SÚNG</span>
     <span class="wslot" data-w="3"><span class="key">4</span>🔫 AK-47</span>
     <span class="wslot" data-w="4"><span class="key">5</span>💣 BOM</span>
+    <div style="margin-top:6px; font-size:10px; letter-spacing:2px; color:#888;">Q / E — ĐỔI VŨ KHÍ</div>
   </div>
 
   <div id="ammoBox" class="hud">
@@ -164,12 +171,16 @@
     <div id="clockSub"><span id="clockZone">GMT+7</span> · <span id="timePhase">CHIỀU</span> · <span id="weatherLabel">☀ NẮNG</span></div>
   </div>
 
+  <div id="missionHud" class="hud hidden">
+    <div id="missionHudText">🔫 NHIỆM VỤ</div>
+  </div>
+
   <div id="minimapBox" class="hud">
     <canvas id="minimap" width="150" height="150"></canvas>
     <div class="caption">MAP</div>
   </div>
 
-  <button id="menuBtn" class="hud" title="Menu (Esc mở khoá chuột rồi bấm)">☰</button>
+  <button id="menuBtn" class="hud" title="Menu tạm dừng (ESC)">☰</button>
   <div id="fpsBox" class="hud hidden">FPS: <span id="fpsN">0</span></div>
 
   <!-- Main menu -->
@@ -180,6 +191,23 @@
       <button class="btn" id="startBtn">▶ BẮT ĐẦU</button>
       <button class="btn" id="settingsBtn">⚙ CÀI ĐẶT</button>
       <button class="btn" id="aboutBtn">ℹ GIỚI THIỆU</button>
+    </div>
+  </div>
+
+  <!-- Mission info panel (press M) -->
+  <div id="missionOverlay" class="overlay hidden">
+    <div class="panel">
+      <h1>NHIỆM VỤ</h1>
+      <div id="missionTitle" class="mTitle">—</div>
+      <div id="missionDesc" class="mDesc">—</div>
+      <div id="missionProgress" class="mProg">—</div>
+      <div class="keys">
+        <div><b>WASD</b> di chuyển · <b>SHIFT</b> chạy · <b>SPACE</b> nhảy</div>
+        <div><b>CTRL</b> lăn né · <b>C</b> ngồi · <b>Z</b> bò</div>
+        <div><b>CLICK TRÁI</b> bắn/đánh · <b>GIỮ CHUỘT PHẢI</b> ngắm</div>
+        <div><b>Q / E</b> đổi vũ khí · <b>F</b> lên/xuống xe</div>
+      </div>
+      <div class="panelBtns"><button class="btn small" id="missionCloseBtn">✖ ĐÓNG (M / ESC)</button></div>
     </div>
   </div>
 
@@ -231,7 +259,8 @@
         <label class="row">Phong cách đồ họa
           <select id="qStyle">
             <option value="modern" selected>UNITY CITY (hiện đại)</option>
-            <option value="neon">VICE CITY (neon)</option>
+            <option value="neon">VICE CITY (neon hoàng hôn)</option>
+            <option value="night">GTA NIGHT (thành phố về đêm)</option>
           </select>
         </label>
         <label class="row">Tầm nhìn (FOV) <input type="range" id="qFov" min="50" max="80" step="1" value="62"><span id="qFovVal">62</span></label>
@@ -242,12 +271,13 @@
         <label class="row">Độ nhạy chuột <input type="range" id="cSens" min="40" max="300" step="5" value="100"><span id="cSensVal">100%</span></label>
         <label class="row"><input type="checkbox" id="cInvert"> Đảo trục dọc</label>
         <div class="keys">
-          <div><b>WASD</b> di chuyển · <b>SHIFT</b> chạy</div>
+          <div><b>WASD</b> di chuyển · <b>SHIFT</b> chạy · <b>SPACE</b> nhảy</div>
+          <div><b>CTRL</b> lăn né đòn · <b>C</b> ngồi · <b>Z</b> bò sát đất</div>
           <div><b>CHUỘT</b> xoay camera · <b>LĂN CHUỘT</b> zoom</div>
           <div><b>CLICK TRÁI</b> bắn/đánh · <b>GIỮ CHUỘT PHẢI</b> ngắm</div>
-          <div><b>E</b> lên/xuống xe · <b>C</b> camera sau lưng</div>
-          <div><b>1·2·3·4·5</b> vũ khí (5 = BOM) · <b>R</b> nạp đạn</div>
-          <div><b>ESC</b> menu tạm dừng · <b>M</b> menu · <b>T</b> thời tiết · <b>G</b> đổi giờ</div>
+          <div><b>F</b> lên/xuống xe · <b>V</b> camera sau lưng</div>
+          <div><b>Q·E</b> đổi vũ khí · <b>1·2·3·4·5</b> chọn vũ khí (5 = BOM) · <b>R</b> nạp đạn</div>
+          <div><b>M</b> xem nhiệm vụ · <b>ESC</b> menu tạm dừng · <b>T</b> thời tiết · <b>G</b> đổi giờ</div>
           <div><b>~</b> bảng CHEAT · gõ nhanh: health · armor · reload</div>
         </div>
       </div>
@@ -263,13 +293,14 @@
   <div id="aboutOverlay" class="overlay hidden">
     <div class="panel about">
       <h1>GIỚI THIỆU</h1>
-      <p><b>PIXEL VICE CITY</b> — game thế giới mở 3D góc nhìn người thứ ba lấy cảm hứng từ GTA Vice City.</p>
+      <p><b>PIXEL VICE CITY</b> — game thế giới mở 3D góc nhìn người thứ ba lấy cảm hứng từ GTA và prototype "Open World GTA Style".</p>
       <ul>
-        <li>Thành phố mở 11×11 block, 4 khu, sông + cầu, bãi biển; <b>2 phong cách đồ họa: UNITY CITY (hiện đại, đổ bóng + vật liệu PBR) và VICE CITY (neon hoàng hôn)</b> — đổi trong Cài đặt.</li>
-        <li>112 người đi đường, 34 xe, 11 thuyền, cá mập; truy nã 1–5 sao, cảnh sát truy đuổi, trộm xe, bắn nổ xe.</li>
-        <li>Vũ khí: tay, dao, súng lục, AK-47, bom nổ (5); auto-aim, nạp đạn có thời gian.</li>
-        <li>Bơi sông/biển, bắn từ trong xe, giáp; bảng lệnh cheat mở bằng phím ~.</li>
-        <li>Thời tiết ngẫu nhiên nắng/mây/mưa/giông, giờ ngẫu nhiên SÁNG/CHIỀU/TỐI, đồng hồ GMT+7.</li>
+        <li>Thành phố mở 11×11 block, 4 khu, sông + cầu, bãi biển; <b>3 phong cách đồ họa: UNITY CITY (hiện đại), VICE CITY (neon hoàng hôn) và GTA NIGHT (thành phố về đêm — mở đầu game lúc 21h30)</b> — đổi trong Cài đặt.</li>
+        <li>112 người đi đường, <b>12 tên côn đồ băng đảng (có súng)</b>, 24 cảnh sát, 34 xe, 11 thuyền, cá mập; truy nã 1–5 sao, cảnh sát truy đuổi, trộm xe, bắn nổ xe.</li>
+        <li>Vũ khí: tay, dao, súng lục, AK-47, bom nổ; auto-aim, nạp đạn có thời gian, đổi vũ khí bằng Q/E hoặc 1–5.</li>
+        <li>Di chuyển đầy đủ: <b>nhảy (SPACE), lăn né đòn (CTRL — bất tử trong lúc lăn), ngồi (C), bò (Z)</b>; bơi sông/biển, bắn từ trong xe, giáp.</li>
+        <li><b>Hệ thống nhiệm vụ: dọn băng đảng, lấy xe hàng giao xe, điểm hẹn</b> — xem mục tiêu bằng phím M, hoàn thành nhận thưởng đạn/giáp/máu.</li>
+        <li>Thời tiết ngẫu nhiên nắng/mây/mưa/giông, đồng hồ GMT+7; bảng lệnh cheat mở bằng phím ~.</li>
       </ul>
       <p class="fine">Game nguyên bản dựng bằng code thủ tục, không sử dụng tài nguyên có bản quyền của Rockstar Games.</p>
       <button class="btn small" id="aboutBackBtn">← QUAY LẠI</button>

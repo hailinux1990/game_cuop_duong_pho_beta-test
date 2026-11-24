@@ -63,7 +63,7 @@
   const CENTER = CITY / 2;        // 192.5
   const GROUND_HALF = CENTER + 22;
 
-  /* ---- UNITY CITY (modern, PBR) & VICE CITY (neon sunset) world palettes ---- */
+  /* ---- UNITY CITY (modern, PBR), VICE CITY (neon sunset) & GTA NIGHT (open-world night) palettes ---- */
   const STYLES = {
     modern: {
       ground: 0x8f9499, road: 0x383c42, sidewalk: 0xa7abb0, grass: 0x4f8f4f,
@@ -77,6 +77,21 @@
         se: [0x6a8a9e, 0x5f7f95, 0x8aa8b8, 0x7a95a5]         // blue glass downtown
       },
       neon: false
+    },
+    // GTA NIGHT: the reference open-world look — a dark city after sundown with
+    // glowing neon signs, lit windows, bright street lamps and car headlights.
+    night: {
+      ground: 0x33383f, road: 0x23262e, sidewalk: 0x7e848c, grass: 0x3a5c40,
+      line: 0xffe9b0, water: 0x0e3a56, bridge: 0x545a64, railing: 0x8a94a2,
+      sand: 0xc2ad86, shallow: 0x1e5a78, foam: 0xe8f4fa, ocean: 0x08283e,
+      building: [0x454a54, 0x3a3f48, 0x515660, 0x2e333c],
+      districtPals: {
+        nw: [0x626872, 0x505660, 0x464c56, 0x5a606a],        // dark concrete quarter
+        ne: [0x54402e, 0x473626, 0x614a34, 0x3e2f20],        // dark brick quarter
+        sw: [0x625a4e, 0x544c40, 0x6e6252, 0x4a433a],        // old town at night
+        se: [0x2c4454, 0x243a48, 0x34525e, 0x1e303c]         // glass downtown at night
+      },
+      neon: true
     },
     neon: {
       ground: 0x3a3138, road: 0x2b2630, sidewalk: 0xb59a9c, grass: 0x3c6b46,
@@ -107,9 +122,10 @@
   const settings = {
     quality: 'medium', fov: 62, fxWeather: true, showFps: false,
     sens: 1, invertY: false, volume: 60, muted: false,
-    style: 'modern'     // 'modern' = UNITY CITY (hiện đại, PBR + đổ bóng), 'neon' = VICE CITY (neon hoàng hôn)
+    style: 'modern'     // 'modern' = UNITY CITY (hiện đại), 'neon' = VICE CITY (neon hoàng hôn), 'night' = GTA NIGHT (thành phố về đêm)
   };
-  const isNeon = () => settings.style === 'neon';
+  const isNeon = () => settings.style === 'neon' || settings.style === 'night';
+  const STYLE_LABEL = { modern: 'UNITY CITY (hiện đại)', neon: 'VICE CITY (neon hoàng hôn)', night: 'GTA NIGHT (thành phố về đêm)' };
   const isVox = () => false;                 // legacy hook: phong cách voxel đã được thay bằng UNITY CITY
   function loadSettings() {
     try {
@@ -126,7 +142,7 @@
       if (typeof s.volume === 'number') settings.volume = Math.max(0, Math.min(100, s.volume));
       if (typeof s.muted === 'boolean') settings.muted = s.muted;
       if (s.style === 'vice' || s.style === 'voxel') settings.style = 'neon';   // migrate old styles
-      if (s.style === 'modern' || s.style === 'neon') settings.style = s.style;
+      if (s.style === 'modern' || s.style === 'neon' || s.style === 'night') settings.style = s.style;
     } catch (e) { /* private mode / tests */ }
   }
   function saveSettings() {
@@ -228,6 +244,7 @@
     blood() { this.noise(0.06, 0.12, 400); },
     die() { this.tone(220, 0.5, 'sawtooth', 0.25, 40); },
     click() { this.tone(700, 0.04, 'square', 0.12, 900); },
+    jump() { this.tone(180, 0.1, 'sine', 0.12, 520); },
     car() { this.tone(80, 0.2, 'sawtooth', 0.2, 140); },
     empty() { this.tone(180, 0.05, 'square', 0.14, 120); this.noise(0.03, 0.1, 900); },
     reload() { this.tone(520, 0.06, 'square', 0.1, 700); setTimeout(() => this.tone(620, 0.05, 'square', 0.1, 900), 90); setTimeout(() => this.click(), 260); },
@@ -398,6 +415,20 @@
       night: [
         [0.00, '#02030b'], [0.35, '#0a0f26'], [0.48, '#141c3d'],
         [0.52, '#20284a'], [0.60, '#33385e'], [0.75, '#2a2a4a'], [1.00, '#0a0a14']
+      ]
+    },
+    night: {
+      morning: [
+        [0.00, '#04060f'], [0.30, '#0c1226'], [0.45, '#18203e'],
+        [0.50, '#28304e'], [0.58, '#3a4060'], [0.75, '#262c4a'], [1.00, '#080a12']
+      ],
+      afternoon: [
+        [0.00, '#050610'], [0.30, '#0e1024'], [0.45, '#1e1438'],
+        [0.50, '#2a1c42'], [0.58, '#3a2c52'], [0.75, '#241c38'], [1.00, '#0a0810']
+      ],
+      night: [
+        [0.00, '#010208'], [0.30, '#080c20'], [0.45, '#10182f'],
+        [0.50, '#1c243e'], [0.60, '#282f4c'], [0.75, '#1e2440'], [1.00, '#060810']
       ]
     }
   };
@@ -651,14 +682,14 @@
         label: 'CHIỀU'
       }),
       night: makePalette({
-        fog: 0x0a0e1c, fogNear: 40, fogFar: 500,
-        sky: 0x9aa0c8,
-        key: 0x8fa0d8, keyInt: 0.45,
-        amb: 0x6a6a9a, ambInt: 0.3,
-        hemiSky: 0x2a3a5c, hemiGround: 0x0c0c14, hemiInt: 0.28,
-        rim: 0x5a5a8a, rimInt: 0.15,
+        fog: 0x070b18, fogNear: 34, fogFar: 440,
+        sky: 0x101a3c,
+        key: 0x7a90c8, keyInt: 0.4,
+        amb: 0x4a5a8a, ambInt: 0.28,
+        hemiSky: 0x1c2c50, hemiGround: 0x08090f, hemiInt: 0.24,
+        rim: 0x6a7aa8, rimInt: 0.14,
         sun: 0, moon: 1, stars: 1,
-        cloud: 0x2a3350, cloudOp: 0.5,
+        cloud: 0x1c243e, cloudOp: 0.45,
         label: 'TỐI'
       })
     },
@@ -694,6 +725,44 @@
         rim: 0x5a4a8a, rimInt: 0.12,
         sun: 0, moon: 1, stars: 1,
         cloud: 0x3a4160, cloudOp: 0.4,
+        label: 'TỐI'
+      })
+    },
+    // GTA NIGHT: the reference prototype look — deep blue night sky, pale
+    // moonlight, dark streets and everything glowing back at you. The whole
+    // style sits in twilight so the city always reads like the video.
+    night: {
+      morning: makePalette({
+        fog: 0x0d1326, fogNear: 36, fogFar: 430,
+        sky: 0x141c38,
+        key: 0x8fa4d8, keyInt: 0.4,
+        amb: 0x4a5878, ambInt: 0.34,
+        hemiSky: 0x1a2a48, hemiGround: 0x0a0c12, hemiInt: 0.3,
+        rim: 0x6a7aa8, rimInt: 0.18,
+        sun: 0.25, moon: 0.75, stars: 0.55,
+        cloud: 0x1c2440, cloudOp: 0.42,
+        label: 'SÁNG'
+      }),
+      afternoon: makePalette({
+        fog: 0x10142a, fogNear: 32, fogFar: 420,
+        sky: 0x1a1430,
+        key: 0xb88060, keyInt: 0.42,
+        amb: 0x4a4060, ambInt: 0.32,
+        hemiSky: 0x221c44, hemiGround: 0x0a0a10, hemiInt: 0.26,
+        rim: 0x705a88, rimInt: 0.16,
+        sun: 0.35, moon: 0.7, stars: 0.6,
+        cloud: 0x241c38, cloudOp: 0.4,
+        label: 'CHIỀU'
+      }),
+      night: makePalette({
+        fog: 0x060a18, fogNear: 26, fogFar: 400,
+        sky: 0x0e1632,
+        key: 0x7a8fc8, keyInt: 0.34,
+        amb: 0x3c4a74, ambInt: 0.26,
+        hemiSky: 0x1c2c52, hemiGround: 0x07080e, hemiInt: 0.2,
+        rim: 0x6a7ab8, rimInt: 0.14,
+        sun: 0, moon: 1, stars: 1,
+        cloud: 0x141c36, cloudOp: 0.38,
         label: 'TỐI'
       })
     }
@@ -2907,11 +2976,14 @@
 
   /* ---------------- Player ---------------- */
   function createPlayer() {
-    // hero outfit per graphics style: modern = striped shirt + dark slacks, neon = Tommy cream tropical shirt
-    const modern = !isNeon();
-    const heroOpt = modern
-      ? { shirt: 0xe8ecf0, pants: 0x2b3140, hair: 0x1f160d, face: true, shoe: 0x1a181e, shirtTex: stripeTexture(0xe8ecf0, 0x4a6f8f, 1) }
-      : { shirt: 0xf3efe2, pants: 0x2b3140, hair: 0x2a1c12, face: true, shoe: 0x1a181e, shirtTex: shirtTexture(0xf3efe2, 0x2fa8a0, 1) };
+    // hero outfit per graphics style: modern = striped shirt + dark slacks,
+    // neon = Tommy cream tropical shirt, night = dark leather jacket (GTA NIGHT)
+    const style = settings.style;
+    const heroOpt = style === 'neon'
+      ? { shirt: 0xf3efe2, pants: 0x2b3140, hair: 0x2a1c12, face: true, shoe: 0x1a181e, shirtTex: shirtTexture(0xf3efe2, 0x2fa8a0, 1) }
+      : style === 'night'
+        ? { shirt: 0x2a2622, pants: 0x1c1f26, hair: 0x14100c, face: true, shoe: 0x101014, shirtTex: stripeTexture(0x2a2622, 0x8a2a2a, 1) }
+        : { shirt: 0xe8ecf0, pants: 0x2b3140, hair: 0x1f160d, face: true, shoe: 0x1a181e, shirtTex: stripeTexture(0xe8ecf0, 0x4a6f8f, 1) };
     const g = makeHuman(heroOpt);
     scene.add(g);
 
@@ -2997,7 +3069,11 @@
       facing: 0, anim: 0, idleT: 0, meleeT: 0, meleeTotal: 0.32,
       isMoving: false, targetSeen: false,
       switchT: 0, reloadT: 0, reloadTotal: 0, recoil: 0, bloom: 0,
-      attackCd: 0, shotCd: 0, dead: false, lastFire: 0
+      attackCd: 0, shotCd: 0, dead: false, lastFire: 0,
+      // open-world mobility: jump, roll-dodge, crouch & crawl
+      vy: 0, yOff: 0, onGround: true, jumpLock: false,
+      crouch: false, crawl: false,
+      rollT: 0, rollCd: 0, rollSpin: 0, rollDir: new THREE.Vector3(0, 0, 1)
     };
   }
 
@@ -3055,12 +3131,25 @@
   const CAPS = [0xff4f6a, 0x3f8f5f, 0x2f6fbf, 0xffd25e, 0x9b6bff];
   function makeNPC(type) {
     const isPolice = type === 'police';
+    const isEnemy = type === 'enemy';
     let opt;
     if (isPolice) {
       opt = {
         shirt: 0x1f3a6f, pants: 0x15151c, skin: SKINS[(rng() * SKINS.length) | 0], hair: 0x140f0a,
         hat: 'police', capColor: 0x142850, sunglasses: rng() < 0.5, badge: true,
         holster: true, belt: 0x0c0c10, shoe: 0x0d0d10, scale: 0.97 + rng() * 0.06
+      };
+    } else if (isEnemy) {
+      // street gang thug: dark hoodie/tee, beanie or cap, shades, a pistol on the hip
+      opt = {
+        shirt: [0x14161c, 0x1a1a22, 0x241c1a, 0x0e1014][(rng() * 4) | 0],
+        pants: [0x16181e, 0x1c1c24, 0x22201c][(rng() * 3) | 0],
+        skin: SKINS[(rng() * SKINS.length) | 0], hair: 0x0c0a08,
+        hat: rng() < 0.6 ? 'baseball' : undefined,
+        capColor: [0x101218, 0x2a1a12, 0x141a20][(rng() * 3) | 0],
+        sunglasses: rng() < 0.45,
+        holster: true, belt: 0x0c0c10, shoe: 0x121216,
+        scale: 0.95 + rng() * 0.1
       };
     } else {
       const female = rng() < 0.42;
@@ -3107,14 +3196,16 @@
 
     const npc = {
       type, group: g, pos: start.clone(),
-      hp: isPolice ? 70 : 40, maxHp: isPolice ? 70 : 40,
-      state: isPolice ? 'patrol' : 'walk',
-      target: null, wanderTimer: 0, speed: isPolice ? 3.4 : 1.9,
+      hp: isPolice ? 70 : (isEnemy ? 60 : 40), maxHp: isPolice ? 70 : (isEnemy ? 60 : 40),
+      state: isPolice ? 'patrol' : (isEnemy ? 'gang' : 'walk'),
+      home: isEnemy ? start.clone() : null,
+      target: null, wanderTimer: 0, speed: isPolice ? 3.4 : (isEnemy ? 1.7 : 1.9),
       dead: false, deathT: 0, fleeDir: new THREE.Vector3(),
       path: [], pathI: 0, shootCd: rng() * 1.2, losTimer: 0, los: true,
       anim: 0, facing: 0, runSpeed: 5.2,
-      mood: isPolice ? (rng() < 0.5 ? 'angry' : 'calm') : rollMood(),
-      moodAnim: 0, bubbleT: 2 + rng() * 4, hideT: 0, bubble: null
+      mood: isPolice ? (rng() < 0.5 ? 'angry' : 'calm') : (isEnemy ? 'angry' : rollMood()),
+      moodAnim: 0, bubbleT: 2 + rng() * 4, hideT: 0, bubble: null,
+      alertedT: 0
     };
     g.userData.owner = npc;
     g.userData.parts.forEach(p => p.userData.owner = npc);
@@ -3589,6 +3680,21 @@
       color: [0x2e6fc2, 0x2e8f4a, 0xc2a02e, 0x4a4a52, 0x8a5a2e][(rng() * 5) | 0],
       kind: CAR_KINDS[(rng() * CAR_KINDS.length) | 0], speed: 6 + rng() * 3
     });
+
+    // ---- street gangs: three turfs of armed thugs guarding their block ----
+    for (let t = 0; t < 3; t++) {
+      const turf = randomWalkablePoint();
+      for (let i = 0; i < 4; i++) {
+        const n = makeNPC('enemy');
+        let p = null;
+        for (let k = 0; k < 30 && !p; k++) {
+          const cand = randomLocalPoint(turf, 10);
+          if (!isInsideBuilding(cand.x, cand.z) && !isInsideWater(cand.x, cand.z)) p = cand;
+        }
+        if (p) { n.pos.copy(p); n.group.position.copy(p); }
+        n.home = n.pos.clone();
+      }
+    }
     // river life: cruisers & fishing boats running BOTH directions under the bridges
     for (let k = 0; k < 11; k++) {
       const x = -CENTER + 10 + k * ((CENTER * 2 - 20) / 10);
@@ -3648,8 +3754,8 @@
 
   /* ---------------- Graphics style switch (VICE CITY <-> FREELIFE voxel) ---------------- */
   function applyWorldStyle(style) {
-    if (style !== 'modern' && style !== 'neon') return;
-    if (settings.style === style) { toast('Phong cách đồ họa: ' + (style === 'modern' ? 'UNITY CITY (hiện đại)' : 'VICE CITY (neon)')); return; }
+    if (style !== 'modern' && style !== 'neon' && style !== 'night') return;
+    if (settings.style === style) { toast('Phong cách đồ họa: ' + STYLE_LABEL[style]); return; }
     settings.style = style;
     saveSettings();
 
@@ -3662,6 +3768,8 @@
     // tear down every entity and the whole city, then rebuild in the new style
     const drop = (obj) => { if (obj && obj.parent) obj.parent.remove(obj); };
     NPCs.forEach(n => { drop(n.group); if (n.bubble) drop(n.bubble); });
+    if (mission && mission.beacon) { drop(mission.beacon); mission.beacon = null; }
+    mission = null;                       // the marked car/point died with the old world
     cars.forEach(c => drop(c.group));
     boats.forEach(b => drop(b.group));
     sharks.forEach(s => drop(s.group));
@@ -3705,7 +3813,8 @@
     snapCamera();
     updateHealthHUD(); updateWantedHUD(); updateWeaponHUD(); updateAmmoHUD();
     updateShotsHUD(); updateReloadHUD(); updateVehicleHUD();
-    toast('Phong cách đồ họa: ' + (style === 'modern' ? 'UNITY CITY (hiện đại)' : 'VICE CITY (neon)'));
+    startMission();                       // missions live in the new world too
+    toast('Phong cách đồ họa: ' + STYLE_LABEL[style]);
   }
 
   /* ---------------- Blood FX ---------------- */
@@ -3916,6 +4025,8 @@
       triggerNPCSpeech(npc, 'shot');
     } else if (npc.type === 'police') {
       triggerNPCSpeech(npc, 'playerShot');
+    } else if (npc.type === 'enemy') {
+      npc.state = 'attack'; npc.alertedT = 10; npc.path = [];
     }
     
     if (npc.hp <= 0) killNPC(npc, dir);
@@ -3932,10 +4043,17 @@
     // mark meshes non-hittable
     npc.group.userData.parts.forEach(p => { const i = hittables.indexOf(p); if (i >= 0) hittables.splice(i, 1); });
     corpses.push(npc);
+    // gang-hunt missions count every dead thug
+    if (npc.type === 'enemy' && mission && mission.active && mission.type === 'kill') {
+      mission.progress = Math.min(mission.need, mission.progress + 1);
+      floatTextWorld('+1 MỤC TIÊU (' + mission.progress + '/' + mission.need + ')', npc.pos.x, npc.pos.y + 2.3, npc.pos.z, '#7df');
+      updateMissionHUD();
+    }
   }
 
   function playerTakeDamage(dmg, from) {
     if (player.dead) return;
+    if (player.rollT > 0) return;                 // mid-roll dodge: the shots whiz past
     if (player.armor > 0) {                       // armor soaks damage before HP
       const absorbed = Math.min(player.armor, dmg);
       player.armor -= absorbed;
@@ -4136,10 +4254,11 @@
     spawnTracer(_muzzleW, hitPoint, w.tracer);
 
     if (hitOwner) {
-      if (hitOwner.type === 'civilian' || hitOwner.type === 'police') {
+      if (hitOwner.type === 'civilian' || hitOwner.type === 'police' || hitOwner.type === 'enemy') {
         const dmg = hitHead ? w.headDmg : w.dmg;
         damageNPC(hitOwner, dmg, hitPoint, dir);
-        triggerCrime(hitOwner.type === 'police' ? 1.6 : 0.9);
+        // shooting a gangster barely alarms the cops — a true self-defense
+        triggerCrime(hitOwner.type === 'police' ? 1.6 : (hitOwner.type === 'enemy' ? 0.35 : 0.9));
         floatText(hitHead ? 'HEADSHOT!' : 'TRÚNG!', W / 2 + 18, H / 2 - 48, '#f66');
         hitMark();
       } else if (hitOwner.group && !hitOwner.dead) {
@@ -4182,11 +4301,13 @@
       hitAny = true;
       damageNPC(npc, dmg, npc.pos.clone().setY(1.1), a.dir);
       if (npc.dead) {
-        triggerCrime(npc.type === 'police' ? 1.6 : 0.9);
+        triggerCrime(npc.type === 'police' ? 1.6 : (npc.type === 'enemy' ? 0.35 : 0.9));
       } else if (npc.type === 'civilian') {
         triggerCrime(0.7);
       } else if (npc.type === 'police') {
         triggerCrime(1.2);
+      } else if (npc.type === 'enemy') {
+        triggerCrime(0.2);     // brawling with a thug barely alerts the cops
       }
     });
     if (!hitAny) {
@@ -4528,6 +4649,58 @@
         if (player.dead || player.wanted <= 0) { npc.state = 'patrol'; npc.path = []; }
       }
       npc.speed = npc.state === 'chase' ? 4.6 : 3.0;
+    } else if (npc.type === 'enemy') {
+      // ---- gang thugs: hold their turf, then rush & gun down the hero ----
+      const d = player && !player.dead ? npc.pos.distanceTo(player.pos) : 1e9;
+      npc.alertedT = Math.max(0, (npc.alertedT || 0) - dt);
+      if (npc.state === 'gang') {
+        // idly hang around the turf, keeping an eye on the street
+        if (!npc.target || npc.wanderTimer <= 0 || npc.pos.distanceTo(npc.target) < 1.2) {
+          npc.target = npc.home ? randomLocalPoint(npc.home, 12) : randomLocalPoint(npc.pos, 8);
+          npc.wanderTimer = 2 + rng() * 6;
+        }
+        npc.wanderTimer -= dt;
+        moveDir.copy(npc.target).sub(npc.pos).setY(0);
+        npc.speed = 1.7;
+        if (d < 14) {
+          npc.state = 'attack'; npc.path = []; npc.alertedT = 8;
+          if (performance.now() - lastGangAlert > 2500) {
+            lastGangAlert = performance.now();
+            if (mission && mission.active && mission.type === 'kill') toast('Băng đảng phát hiện bạn!');
+            Sfx.warn();
+          }
+        }
+      } else if (npc.state === 'attack') {
+        npc.losTimer -= dt;
+        if (npc.losTimer <= 0) { npc.losTimer = 0.25; npc.los = hasLOS(npc.pos, player.pos); }
+        if (d > 50) { npc.state = 'return'; npc.path = []; }
+        else if (npc.los) {
+          moveDir.copy(player.pos).sub(npc.pos).setY(0);
+          if (d > 9) {
+            npc.speed = 4.3;                     // close the distance
+          } else {
+            moveDir.set(0, 0, 0);                // stand and shoot
+            npc.speed = 0;
+            npc.shootCd -= dt;
+            if (npc.shootCd <= 0) { npc.shootCd = 1.4 + rng() * 1.2; enemyShoot(npc); }
+          }
+        } else {
+          // lost sight: jog toward the last known position
+          moveDir.copy(player.pos).sub(npc.pos).setY(0);
+          npc.speed = 4.3;
+        }
+      } else if (npc.state === 'return') {
+        if (!npc.home) { npc.state = 'gang'; npc.target = null; }
+        else {
+          moveDir.copy(npc.home).sub(npc.pos).setY(0);
+          npc.speed = 3.2;
+          if (npc.pos.distanceTo(npc.home) < 2) { npc.state = 'gang'; npc.target = null; npc.hp = npc.maxHp; }
+          else if (d < 14) { npc.state = 'attack'; npc.path = []; }
+        }
+      } else {
+        npc.state = 'gang'; npc.target = null;
+      }
+      moving = true;
     } else {
       // civilian
       if (npc.state === 'flee') {
@@ -4669,6 +4842,21 @@
     const dist = npc.pos.distanceTo(player.pos);
     const hitChance = Math.max(0.25, 1 - dist / 30);
     if (rng() < hitChance) playerTakeDamage(7 + rng() * 6, npc.pos);
+  }
+
+  // gang pistol fire: weaker than police but the thugs shoot from up close
+  function enemyShoot(npc) {
+    npc.shootT = 0.35;
+    const from = npc.pos.clone().setY(1.35);
+    const to = player.pos.clone().setY(1.0);
+    const dir = to.clone().sub(from).normalize();
+    dir.x += (rng() - 0.5) * 0.18; dir.z += (rng() - 0.5) * 0.18; dir.normalize();
+    Sfx.shoot();
+    spawnMuzzle(from);
+    spawnTracer(from, player.pos.clone().setY(1.0), 0xff7a5a);
+    const dist = npc.pos.distanceTo(player.pos);
+    const hitChance = Math.max(0.18, 1 - dist / 22);
+    if (rng() < hitChance) playerTakeDamage(4 + rng() * 5, npc.pos);
   }
 
   /* ---------------- Pathfinding (road grid BFS) ---------------- */
@@ -5092,6 +5280,10 @@
     player.vel.set(0, 0, 0);
     player.isMoving = false;
     player.stepT = 0;
+    // stand up straight behind the wheel
+    player.crouch = false; player.crawl = false; player.group.scale.set(1, 1, 1);
+    player.vy = 0; player.yOff = 0; player.onGround = true;
+    player.rollT = 0; player.rollSpin = 0;
     player.group.rotation.x = 0;
     scene.remove(player.group);
     // Point the chase-camera down the car so driving reads immediately.
@@ -5107,7 +5299,7 @@
         ? 'Trộm xe CẢNH SÁT! Cảnh sát đang truy đuổi!'
         : 'Đã trộm xe — tài xế bị đẩy ra và bỏ chạy!');
     } else {
-      toast('Đã lên xe — WASD lái, E xuống xe');
+      toast('Đã lên xe — WASD lái, F xuống xe');
     }
     Sfx.car();
   }
@@ -5188,6 +5380,27 @@
       if (e.key !== undefined) cheatType(e.key);
     }
   }
+  // cycle through the weapon wheel (Open World GTA Style: Q / E)
+  function cycleWeapon(dir) {
+    if (!player || player.dead || player.inCar || player.swimming) return;
+    const n = WEAPONS.length;
+    setPlayerWeapon((player.weapon + dir + n) % n);
+  }
+  function toggleCrouch() {
+    if (!player || player.dead || player.inCar || player.swimming) return;
+    player.crouch = !player.crouch;
+    if (player.crouch) player.crawl = false;
+    toast(player.crouch ? 'ĐÃ NGỒI — ấn C để đứng dậy' : 'ĐÃ ĐỨNG DẬY');
+    Sfx.click();
+  }
+  function toggleCrawl() {
+    if (!player || player.dead || player.inCar || player.swimming) return;
+    player.crawl = !player.crawl;
+    if (player.crawl) { player.crouch = false; toast('ĐÃ BÒ SÁT ĐẤT — ấn Z để đứng dậy'); }
+    else toast('ĐÃ ĐỨNG DẬY');
+    Sfx.click();
+  }
+
   function handleKeyPress(code) {
     if (!player || player.dead) return;
     if (code === 'Digit1' || code === 'Numpad1') setPlayerWeapon(0);
@@ -5201,13 +5414,22 @@
       if (w && w.kind === 'melee') toast('Vũ khí cận chiến không cần nạp đạn');
       else { startReload(false); Sfx.click(); }
     }
-    else if (code === 'KeyC') recenterCamera();
+    else if (code === 'KeyQ') cycleWeapon(-1);       // previous weapon / item
+    else if (code === 'KeyE') cycleWeapon(1);        // next weapon / item
+    else if (code === 'KeyF') { if (player.inCar) exitCar(); else enterCar(); }   // action / enter vehicle
+    else if (code === 'KeyC') toggleCrouch();        // crouch
+    else if (code === 'KeyZ') toggleCrawl();         // crawl
+    else if (code === 'KeyV') recenterCamera();      // snap the camera back
     else if (code === 'BracketRight') { sensScale = Math.min(3, sensScale * 1.15); settings.sens = sensScale; saveSettings(); syncSettingsUI(); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
     else if (code === 'BracketLeft') { sensScale = Math.max(0.4, sensScale / 1.15); settings.sens = sensScale; saveSettings(); syncSettingsUI(); toast('Độ nhạy chuột: ' + Math.round(sensScale * 100) + '%'); Sfx.click(); }
     else if (code === 'KeyY') { invertY = !invertY; settings.invertY = invertY; saveSettings(); syncSettingsUI(); toast(invertY ? 'Đảo trục dọc: BẬT' : 'Đảo trục dọc: TẮT'); Sfx.click(); }
-    else if (code === 'KeyM') { openPause(); }
+    else if (code === 'KeyM') {                      // show mission info
+      if (missionPanelOpen) closeMissionPanel();
+      else openMissionPanel();
+    }
     else if (code === 'Escape') {
-      if (paused) resumeGame();
+      if (missionPanelOpen) closeMissionPanel();
+      else if (paused) resumeGame();
       else openPause();
     }
     else if (code === 'KeyT') {
@@ -5222,7 +5444,6 @@
       toast('GIỜ ĐÃ ĐỔI — ' + TIME_PHASES[timePhase]);
       Sfx.click();
     }
-    else if (code === 'KeyE') { if (player.inCar) exitCar(); else enterCar(); }
   }
 
   // classic third-person mouse look: drag (or pointer-lock) steers the chase-cam
@@ -5500,10 +5721,13 @@
     if (player.swimming && !wasSwimming) {
       toast('ĐANG BƠI… cẩn thận CÁ MẬP!');
       Sfx.blood();
+      player.crouch = false; player.crawl = false;   // stand up to swim
     }
+    // stance: crouch and crawl trade speed for a smaller profile
+    const stanceMul = player.crawl ? 0.24 : (player.crouch ? 0.48 : 1);
     const maxSpd = player.swimming
       ? (sprinting ? 4.3 : 3.0)
-      : player.speed * (sprinting ? player.sprint : 1) * (aimHeld ? 0.65 : 1);
+      : player.speed * (sprinting ? player.sprint : 1) * (aimHeld ? 0.65 : 1) * stanceMul;
     // Weighty locomotion: ease toward the target velocity and brake smoothly
     // instead of snapping to full speed the instant a key goes down.
     const tvx = moving ? wx * maxSpd : 0;
@@ -5521,9 +5745,47 @@
     }
     const speed = Math.hypot(vel.x, vel.z);
     player.isMoving = moving || speed > 0.25;
+
+    // ---- roll-dodge (Ctrl): forward tumble, a speed kick and brief i-frames ----
+    player.rollCd = Math.max(0, player.rollCd - dt);
+    if ((keys['ControlLeft'] || keys['ControlRight']) && !player.swimming && !player.crawl &&
+        player.rollCd <= 0 && player.onGround && moving) {
+      player.rollT = 0.38;
+      player.rollCd = 1.1;
+      player.rollSpin = 0;
+      const rv = Math.hypot(vel.x, vel.z);
+      if (rv > 0.3) player.rollDir.set(vel.x / rv, 0, vel.z / rv);
+      else player.rollDir.set(wx, 0, wz).normalize();   // fall back to the input direction
+      Sfx.click();
+    }
+    if (player.rollT > 0) {
+      player.rollT = Math.max(0, player.rollT - dt);
+      player.rollSpin += dt * 17;                    // one full forward tumble
+      vel.x = player.rollDir.x * 7.6;                // the dodge itself is a dash
+      vel.z = player.rollDir.z * 7.6;
+    }
+
     if (speed > 0.001) {
       moveWithCollision(player.pos, vel.x * dt, vel.z * dt);
       clampToWorld(player.pos);
+    }
+
+    // ---- jump (Space): hop with gravity, land back softly ----
+    const wantJump = keys['Space'] && !player.swimming && !player.crawl;
+    if (wantJump && player.onGround && !player.jumpLock) {
+      player.vy = 6.6;
+      player.onGround = false;
+      player.jumpLock = true;
+      Sfx.jump();
+    }
+    if (!keys['Space']) player.jumpLock = false;
+    if (!player.onGround) {
+      player.vy -= 24 * dt;
+      player.yOff += player.vy * dt;
+      if (player.yOff <= 0) {
+        player.yOff = 0; player.vy = 0; player.onGround = true;
+        spawnDust(player.pos.clone().setY(0.2), new THREE.Vector3(0, -1, 0));
+      }
     }
 
     // stride-synced body bob while moving; a soft breathing sway while idle
@@ -5531,7 +5793,11 @@
     else player.idleT = 0;
     const bob = speed > 0.6 ? Math.abs(Math.sin(player.anim || 0)) * 0.03 : 0;
     const breathe = speed < 0.25 ? Math.sin((player.idleT || 0) * 2.0) * 0.006 : 0;
-    player.group.position.set(player.pos.x, groundY(player.pos.x, player.pos.z) + bob + breathe, player.pos.z);
+    player.group.position.set(
+      player.pos.x,
+      groundY(player.pos.x, player.pos.z) + player.yOff + bob + breathe + (player.crawl ? 0.12 : 0),
+      player.pos.z
+    );
 
     // facing: run toward the actual velocity, otherwise face the crosshair
     const aimFacing = Math.atan2(aim.dir.x, aim.dir.z);
@@ -5564,8 +5830,18 @@
       return;
     }
 
-    // lean slightly into a sprint
-    player.group.rotation.x = sprinting && speed > 2 ? 0.07 : 0;
+    // stance pose: crawl lies the body down, crouch shrinks the silhouette,
+    // a roll tumbles end-over-end, a sprint leans forward slightly
+    if (player.crawl) {
+      player.group.scale.set(1, 1, 1);
+      player.group.rotation.x = -1.25;
+    } else if (player.rollT > 0) {
+      player.group.scale.set(1, 1, 1);
+      player.group.rotation.x = -player.rollSpin;   // full forward tumble
+    } else {
+      player.group.scale.set(1, player.crouch ? 0.78 : 1, 1);
+      player.group.rotation.x = sprinting && speed > 2 ? 0.07 : 0;
+    }
 
     // walk / run animation driven by real ground speed (walk → sprint)
     const movingNow = speed > 0.15;
@@ -5706,7 +5982,9 @@
       const cg = player.inCar.group;
       out.set(cg.position.x, cg.position.y + CAM_CAR_PIVOT_H, cg.position.z);
     } else if (player) {
-      out.set(player.group.position.x, player.group.position.y + CAM_PIVOT_H, player.group.position.z);
+      // the chase-cam pivot follows the stance: lower while crouched/crawling
+      const stanceDrop = player.crawl ? 0.85 : (player.crouch ? 0.5 : 0);
+      out.set(player.group.position.x, player.group.position.y + CAM_PIVOT_H - stanceDrop, player.group.position.z);
     } else {
       out.set(SPAWN.x, SPAWN.y + CAM_PIVOT_H, SPAWN.z);
     }
@@ -6018,9 +6296,9 @@
       const info = nearestCarInfo();
       if (info) {
         const c = info.car;
-        if (c.isPolice) txt = 'E — TRỘM XE CẢNH SÁT';
-        else if (c.stolen || !c.driverMesh) txt = 'E — LÊN XE';
-        else txt = 'E — TRỘM XE';
+        if (c.isPolice) txt = 'F — TRỘM XE CẢNH SÁT';
+        else if (c.stolen || !c.driverMesh) txt = 'F — LÊN XE';
+        else txt = 'F — TRỘM XE';
       }
     }
     if (txt !== _carPromptTxt) { _carPromptTxt = txt; carPrompt.textContent = txt; }
@@ -6055,6 +6333,10 @@
     player.facing = 0; player.group.rotation.set(0, 0, 0);
     player.switchT = 0; player.reloadT = 0; player.bloom = 0; player.recoil = 0;
     player.targetSeen = false;
+    // reset mobility state on respawn
+    player.crouch = false; player.crawl = false; player.group.scale.set(1, 1, 1);
+    player.vy = 0; player.yOff = 0; player.onGround = true;
+    player.rollT = 0; player.rollCd = 0; player.rollSpin = 0;
     if (crosshair) crosshair.classList.remove('aim', 'target');
     scene.add(player.group);
     camYaw = 0; camPitch = -0.17; camDist = CAM_DIST; camInit = false;
@@ -6062,6 +6344,8 @@
     document.getElementById('wasted').classList.add('hidden');
     updateHealthHUD(); updateWantedHUD(); updateVehicleHUD();
     updateReloadHUD();
+    updateMissionHUD();
+    if (!mission) startMission();        // never leave the hero without an objective
     tryPointerLock();                     // click "HỒI SINH" re-captures the mouse
   }
 
@@ -6099,7 +6383,19 @@
     cars.forEach(c => { if (!c.dead) dot(c.group.position.x, c.group.position.z, c.isPolice ? '#6af' : '#fc3', 3); });
     boats.forEach(b => dot(b.pos.x, b.pos.z, '#7ef', 3));
     sharks.forEach(sh => dot(sh.pos.x, sh.pos.z, '#ff4a4a', 3));
-    NPCs.forEach(n => { if (!n.dead) dot(n.pos.x, n.pos.z, n.type === 'police' ? '#35f' : '#5c5', 2); });
+    NPCs.forEach(n => { if (!n.dead) dot(n.pos.x, n.pos.z, n.type === 'police' ? '#35f' : (n.type === 'enemy' ? '#f44' : '#5c5'), 2); });
+    // mission target: a pulsing yellow ring on the minimap
+    if (mission && mission.active && mission.target && typeof updateMission === 'function') {
+      const t = missionTargetPos();
+      if (t) {
+        const pulse = 3 + Math.sin(performance.now() / 160) * 2;
+        mctx.strokeStyle = '#ffd25e';
+        mctx.lineWidth = 2;
+        mctx.beginPath();
+        mctx.arc(W2(t.x), W2(t.z), 4 + pulse, 0, Math.PI * 2);
+        mctx.stroke();
+      }
+    }
     if (player) {
       // the hero is a little arrow pointing where he faces
       const px = W2(player.pos.x), pz = W2(player.pos.z);
@@ -6114,6 +6410,206 @@
       mctx.closePath();
       mctx.fill();
     }
+  }
+
+  /* ---------------- Missions (Open World GTA Style) ----------------
+     Simple open-world missions like the reference prototype: wipe out a
+     street gang, steal a marked car and deliver it, or reach a meeting
+     point. The objective is always on screen; press M for the full panel. */
+  const MISSION_DEFS = [
+    { type: 'kill', title: 'DỌN DẸP BĂNG ĐẢNG', icon: '🔫', desc: 'Tiêu diệt {need} tên côn đồ. Chúng lảng vảng quanh các khu phố — chấm đỏ trên bản đồ.' },
+    { type: 'steal', title: 'LẤY XE HÀNG', icon: '🚗', desc: 'Trộm chiếc xe được đánh dấu, sau đó lái nó vào vòng tròn giao hàng màu vàng.' },
+    { type: 'visit', title: 'ĐIỂM HẸN', icon: '📍', desc: 'Tới vòng tròn màu vàng được đánh dấu trên bản đồ (đi bộ hoặc lái xe).' }
+  ];
+  let mission = null;               // { type, title, icon, desc, need, progress, target, car, carTaken, active, nextT, beacon }
+  let missionsDone = 0;
+  let missionPanelOpen = false;
+  let lastGangAlert = 0;
+
+  // the position the beacon + minimap ring should point at right now
+  function missionTargetPos() {
+    if (!mission || !mission.active) return null;
+    if (mission.type === 'steal' && !mission.carTaken && mission.car && !mission.car.dead) {
+      return mission.car.group.position;
+    }
+    return mission.target;
+  }
+
+  function pickMissionPoint(minDist) {
+    for (let k = 0; k < 40; k++) {
+      const p = randomWalkablePoint();
+      if (p.distanceTo(player.pos) > minDist) return p;
+    }
+    return randomWalkablePoint();
+  }
+
+  function spawnMissionBeacon() {
+    const t = missionTargetPos();
+    if (!t) return;
+    const g = new THREE.Group();
+    const ringM = new THREE.MeshBasicMaterial({ color: 0xffd25e });
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.14, 6, 24), ringM);
+    ring.rotation.x = Math.PI / 2;
+    g.add(ring);
+    const coneM = new THREE.MeshBasicMaterial({ color: 0xffe08a });
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.7, 6), coneM);
+    cone.position.y = 2.7;
+    g.add(cone);
+    g.userData.beacon = true;
+    g.position.set(t.x, 0.2, t.z);
+    scene.add(g);
+    mission.beacon = g;
+  }
+
+  function startMission() {
+    if (!player || player.dead) { mission = null; return; }
+    const def = MISSION_DEFS[missionsDone % MISSION_DEFS.length];
+    mission = {
+      type: def.type, title: def.title, icon: def.icon, desc: def.desc,
+      need: 0, progress: 0, target: null, car: null, carTaken: false,
+      active: true, nextT: 0, beacon: null
+    };
+    if (def.type === 'kill') {
+      mission.need = 4 + (missionsDone % 2);
+      let best = null, bd = 1e9;
+      NPCs.forEach(n => {
+        if (n.type === 'enemy' && !n.dead) {
+          const d = n.pos.distanceTo(player.pos);
+          if (d < bd) { bd = d; best = n.pos; }
+        }
+      });
+      mission.target = best ? best.clone() : pickMissionPoint(40);
+    } else if (def.type === 'steal') {
+      let best = null, bd = 1e9;
+      cars.forEach(c => {
+        if (c.dead || c.isPolice) return;
+        const d = c.pos.distanceTo(player.pos);
+        if (d < bd) { bd = d; best = c; }
+      });
+      mission.car = best || cars.find(c => !c.dead && !c.isPolice) || null;
+      mission.target = pickMissionPoint(70);
+    } else {
+      mission.target = pickMissionPoint(55);
+    }
+    mission.desc = def.desc.replace('{need}', mission.need);
+    spawnMissionBeacon();
+    updateMissionHUD();
+    updateMissionPanel();
+    toast('NHIỆM VỤ MỚI — ' + mission.icon + ' ' + mission.title + ' (ấn M để xem)');
+    Sfx.warn();
+  }
+
+  function completeMission() {
+    mission.active = false;
+    mission.nextT = 4;
+    missionsDone++;
+    if (mission.beacon) { scene.remove(mission.beacon); mission.beacon = null; }
+    const roll = rng();
+    let reward;
+    if (roll < 0.34) { player.ammoStore[2] += 30; player.ammoStore[3] += 60; reward = '+30 ĐẠN SÚNG · +60 ĐẠN AK'; }
+    else if (roll < 0.67) { player.armor = Math.min(player.maxArmor, player.armor + 25); reward = '+25 GIÁP'; }
+    else { player.hp = Math.min(player.maxHp, player.hp + 30); reward = '+30 MÁU'; }
+    updateHealthHUD(); updateAmmoHUD();
+    toast('✅ HOÀN THÀNH NHIỆM VỤ: ' + mission.title + ' — ' + reward);
+    Sfx.warn();
+    updateMissionHUD(); updateMissionPanel();
+  }
+
+  function failMission(reason) {
+    mission.active = false;
+    mission.nextT = 5;
+    if (mission.beacon) { scene.remove(mission.beacon); mission.beacon = null; }
+    toast('❌ NHIỆM VỤ THẤT BẠI — ' + reason);
+    Sfx.warn();
+    updateMissionHUD(); updateMissionPanel();
+  }
+
+  function updateMission(dt) {
+    if (!mission) return;
+    if (!mission.active) {
+      mission.nextT -= dt;
+      if (mission.nextT <= 0) startMission();
+      else updateMissionHUD();
+      return;
+    }
+    if (!player || player.dead) return;
+    if (mission.type === 'kill') {
+      if (mission.progress >= mission.need) completeMission();
+    } else if (mission.type === 'steal') {
+      if (mission.car && mission.car.dead) { failMission('chiếc xe hàng đã bị phá huỷ'); return; }
+      if (!mission.carTaken && player.inCar === mission.car) {
+        mission.carTaken = true;
+        toast('Đã lấy xe! Lái vào vòng tròn vàng.');
+        updateMissionHUD();
+      }
+      if (mission.carTaken && player.inCar === mission.car && player.pos.distanceTo(mission.target) < 8) {
+        completeMission();
+      }
+    } else if (mission.type === 'visit') {
+      if (player.pos.distanceTo(mission.target) < 6) completeMission();
+    }
+    // beacon: bob + spin over the objective, follow the marked car before it is stolen
+    if (mission.beacon) {
+      const t = missionTargetPos();
+      if (t) {
+        mission.beacon.visible = true;
+        mission.beacon.position.set(t.x, 0.2 + Math.sin(performance.now() / 420) * 0.5, t.z);
+        mission.beacon.rotation.y += dt * 1.3;
+      } else mission.beacon.visible = false;
+    }
+  }
+
+  /* ---- mission HUD (always on screen) + M panel ---- */
+  const missionHud = document.getElementById('missionHud');
+  const missionHudText = document.getElementById('missionHudText');
+  function updateMissionHUD() {
+    if (!missionHud) return;
+    if (mission && mission.active) {
+      missionHud.classList.remove('hidden');
+      let t = mission.icon + ' ' + mission.title;
+      if (mission.type === 'kill') t += ' — ' + mission.progress + '/' + mission.need;
+      else if (mission.type === 'steal') t += mission.carTaken ? ' — lái vào vòng tròn vàng' : ' — trộm xe được đánh dấu';
+      else t += ' — tới vòng tròn vàng';
+      missionHudText.textContent = t;
+    } else if (mission) {
+      missionHud.classList.remove('hidden');
+      missionHudText.textContent = '⏳ Nhiệm vụ mới trong ' + Math.max(0, Math.ceil(mission.nextT)) + 's…';
+    } else {
+      missionHud.classList.add('hidden');
+    }
+  }
+
+  const missionOverlay = document.getElementById('missionOverlay');
+  const missionTitleEl = document.getElementById('missionTitle');
+  const missionDescEl = document.getElementById('missionDesc');
+  const missionProgressEl = document.getElementById('missionProgress');
+  function updateMissionPanel() {
+    if (!mission || !missionOverlay) return;
+    if (missionTitleEl) missionTitleEl.textContent = mission.icon + ' ' + mission.title;
+    if (missionDescEl) missionDescEl.textContent = mission.desc || '';
+    if (missionProgressEl) {
+      missionProgressEl.textContent = mission.type === 'kill'
+        ? 'TIẾN ĐỘ: ' + mission.progress + '/' + mission.need + ' tên đã bị hạ'
+        : (mission.active ? 'TIẾN ĐỘ: đang thực hiện…' : 'TIẾN ĐỘ: đã kết thúc');
+    }
+  }
+  function openMissionPanel() {
+    if (!player || player.dead || missionPanelOpen) return;
+    if (!mission) { toast('Chưa có nhiệm vụ — hãy đợi vài giây'); return; }
+    missionPanelOpen = true;
+    paused = true;
+    if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
+    hideOverlay(settingsOverlay); hideOverlay(aboutOverlay);
+    updateMissionPanel();
+    showOverlay(missionOverlay);
+    Sfx.click();
+  }
+  function closeMissionPanel() {
+    if (!missionPanelOpen) return;
+    missionPanelOpen = false;
+    hideOverlay(missionOverlay);
+    paused = false;
+    tryPointerLock();
   }
 
   /* ---------------- Loop ---------------- */
@@ -6194,6 +6690,7 @@
     updateReloadHUD();
     updateCarPrompt();
     updateWeather(dt);
+    updateMission(dt);
     updateClock();
     updateTimeHUD();
 
@@ -6238,7 +6735,7 @@
   function showOverlay(el) { if (el) el.classList.remove('hidden'); }
   function hideOverlay(el) { if (el) el.classList.add('hidden'); }
   function hideGameOverlays() {
-    hideOverlay(pauseOverlay); hideOverlay(settingsOverlay); hideOverlay(aboutOverlay);
+    hideOverlay(pauseOverlay); hideOverlay(settingsOverlay); hideOverlay(aboutOverlay); hideOverlay(missionOverlay);
   }
   function openSettings(from) {
     menuReturn = from || 'start';
@@ -6260,7 +6757,8 @@
     if (!player || player.dead) return;
     paused = true;
     if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
-    hideOverlay(settingsOverlay); hideOverlay(aboutOverlay);
+    hideOverlay(settingsOverlay); hideOverlay(aboutOverlay); hideOverlay(missionOverlay);
+    missionPanelOpen = false;
     showOverlay(pauseOverlay);
   }
   function resumeGame() {
@@ -6366,6 +6864,7 @@
     on('pauseSettingsBtn', 'click', () => openSettings('pause'));
     on('pauseAboutBtn', 'click', () => openAbout('pause'));
     on('cheatClose', 'click', closeCheatConsole);
+    on('missionCloseBtn', 'click', closeMissionPanel);
     on('cheatInput', 'keydown', e => {
       e.stopPropagation();
       if (e.key === 'Enter') runCheatCommand(e.target.value);
@@ -6420,7 +6919,8 @@
     player = createPlayer();
     player.group.position.copy(player.pos);
     player.group.rotation.y = 0;
-    randomizeGameTime(true);            // random SÁNG / CHIỀU / TỐI on every run
+    // open the world after dark — the reference "Open World GTA Style" night look
+    setGameTime((21.2 + Math.random() * 1.6) * 3600);
     // camera parked behind the hero, looking up the street (+z)
     camYaw = 0; camPitch = -0.17; camDist = CAM_DIST; camInit = false;
     recoilPitch = 0; recoilYaw = 0;
@@ -6439,7 +6939,10 @@
     hideOverlay(startOverlay);
     hideGameOverlays();
     if (camera) { camera.fov = settings.fov; camera.updateProjectionMatrix(); }
-    toast('Chào mừng đến VICE CITY! Ấn ☰ (hoặc M) để mở MENU.');
+    // first mission kicks in right away (M = mission info)
+    missionsDone = 0; mission = null; missionPanelOpen = false;
+    startMission();
+    toast('Chào mừng đến VICE CITY! Ấn M để xem NHIỆM VỤ, ESC để mở MENU.');
     tryPointerLock();
     animate();
   }
@@ -6500,6 +7003,33 @@
     applyWorldStyle, isVox, isNeon,
     makeNPC, makeHuman, makeCarEntity,
     setWeather,
+    // mission + mobility hooks (Open World GTA Style update)
+    get mission() { return mission; },
+    get missionsDone() { return missionsDone; },
+    get missionPanelOpen() { return missionPanelOpen; },
+    startMission, updateMission, updateMissionHUD,
+    openMissionPanel, closeMissionPanel,
+    missionTargetPos,
+    forceMission(type) {
+      const idx = MISSION_DEFS.findIndex(d => d.type === type);
+      missionsDone = idx < 0 ? 0 : idx;
+      mission = null;
+      startMission();
+      return mission;
+    },
+    damageNPC,
+    cycleWeapon, toggleCrouch, toggleCrawl,
+    spawnEnemyNear(px, pz) {
+      const n = makeNPC('enemy');
+      for (let t = 0; t < 24; t++) {
+        const p = randomLocalPoint(new THREE.Vector3(px, 0, pz), 20);
+        if (!isInsideBuilding(p.x, p.z) && !isInsideWater(p.x, p.z)) { n.pos.copy(p); break; }
+      }
+      n.home = n.pos.clone();
+      n.group.position.copy(n.pos);
+      return n;
+    },
+    spawnMissionBeacon,
     strikeLightning: triggerLightning,
     setGameHour(h) { setGameTime(h * 3600); updateClock(); updateTimeHUD(); },
     setTimeOfDay(phase) {
