@@ -1071,6 +1071,7 @@
   let worldGroup = new THREE.Group();
   const buildingBoxes = [];   // AABB footprints {minX,maxX,minZ,maxZ}
   const buildingMeshes = [];  // for raycast LOS
+  const bridgeDecks = [];     // raised bridge decks {minX,maxX,minZ,maxZ,h,mesh,fade,lastOp}
   const lampBulbs = [];       // emissive lamp bulb materials (night glow)
   const neonSignMats = [];    // neon sign materials (brighten at night)
   const waterMats = [];       // animated water materials
@@ -2059,6 +2060,13 @@
       const deck = box(ROAD, 0.14, RIVER_HALF * 2 + 4, C.bridge, cx(i), DECK_Y - 0.07, RIVER_Z);
       deck.castShadow = true;
       worldGroup.add(deck);
+      // register the deck for the see-through camera: a hero swimming UNDER
+      // the bridge stays readable (the deck fades to glass like buildings do)
+      bridgeDecks.push({
+        minX: cx(i) - ROAD / 2, maxX: cx(i) + ROAD / 2,
+        minZ: RIVER_Z - RIVER_HALF - 2, maxZ: RIVER_Z + RIVER_HALF + 2,
+        h: DECK_Y, mesh: deck, fade: 1, lastOp: 1
+      });
       const rampN = box(ROAD, 0.12, RAMP_LEN, C.bridge, cx(i), DECK_Y / 2, RIVER_Z - RIVER_HALF - 2 - RAMP_LEN / 2);
       rampN.rotation.x = -rampAngle;                       // north ramp: dips AWAY from deck
       worldGroup.add(rampN);
@@ -3411,8 +3419,10 @@
       speed: 2 + rng() * 2.2,
       baseZ: RIVER_Z + (rng() * 2 - 1) * (RIVER_HALF - 8),
       phase: rng() * Math.PI * 2,
-      wobT: rng() * 10, wakeT: 0.5, prevZ: 0
+      wobT: rng() * 10, wakeT: 0.5, prevZ: 0,
+      maxSpeed: 0, state: 'cruise', yieldT: 0   // 'cruise' | 'yield'
     };
+    boat.maxSpeed = boat.speed;
     boat.prevZ = boat.pos.z;
     g.rotation.y = boat.dirX === 1 ? Math.PI / 2 : -Math.PI / 2;
     boats.push(boat);
@@ -3421,20 +3431,52 @@
 
   function updateBoat(b, dt) {
     b.wobT += dt;
+    // ---- hero avoidance: a boat that meets the main character in the water
+    // brakes to a full stop, waits a beat, then turns around and heads to the
+    // other side of the river before resuming its cruise ----
+    let heroAhead = false;
+    if (player && !player.dead && !player.inCar &&
+        (player.swimming || swimWaterAt(player.pos.x, player.pos.z))) {
+      const dx = player.pos.x - b.pos.x, dz = player.pos.z - b.pos.z;
+      const dd2 = dx * dx + dz * dz;
+      heroAhead = dd2 < 18 * 18 && dx * b.dirX > -2;
+    }
+    if (heroAhead && b.state === 'cruise') {
+      b.state = 'yield';
+      b.yieldT = 1.1 + Math.random() * 0.9;          // stand still for a moment
+    }
+    if (b.state === 'yield') {
+      b.speed = Math.max(0, b.speed - 8 * dt);    // brake hard to a stop
+      b.yieldT -= dt;
+      if (b.yieldT <= 0) {
+        // depart: turn away from the hero and cross to the far side
+        if (player && !player.dead &&
+            (player.pos.x - b.pos.x) * b.dirX > -1) b.dirX = -b.dirX;
+        b.baseZ = RIVER_Z + ((player && !player.dead && player.pos.z >= RIVER_Z)
+          ? -1 : 1) * (RIVER_HALF - 8);
+        b.state = 'cruise';
+      }
+    } else {
+      b.speed = Math.min(b.maxSpeed, b.speed + 2.5 * dt);   // ease back to cruise
+    }
     // steady cruise along the river + lazy weave between the banks
     b.pos.x += b.dirX * b.speed * dt;
-    b.pos.z = b.baseZ + Math.sin(b.wobT * 0.35 + b.phase) * (RIVER_HALF - 8);
+    if (b.state !== 'yield') {
+      b.pos.z = b.baseZ + Math.sin(b.wobT * 0.35 + b.phase) * (RIVER_HALF - 8);
+    }
     // wrap around the map edges -> endless traffic in both directions
     if (b.pos.x > CENTER + 16) b.pos.x = -CENTER - 16;
     if (b.pos.x < -CENTER - 16) b.pos.x = CENTER + 16;
 
     const vz = (b.pos.z - b.prevZ) / Math.max(dt, 1e-4);
     b.prevZ = b.pos.z;
-    const targetH = Math.atan2(b.dirX * b.speed, vz);
-    let dh = targetH - b.group.rotation.y;                 // shortest-path yaw glide
-    while (dh > Math.PI) dh -= Math.PI * 2;
-    while (dh < -Math.PI) dh += Math.PI * 2;
-    b.group.rotation.y += dh * Math.min(1, dt * 2.5);
+    if (b.speed > 0.05) {                  // hold heading while stopped
+      const targetH = Math.atan2(b.dirX * b.speed, vz);
+      let dh = targetH - b.group.rotation.y;                 // shortest-path yaw glide
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      b.group.rotation.y += dh * Math.min(1, dt * 2.5);
+    }
     b.group.position.set(b.pos.x, Math.sin(b.wobT * 2.1 + b.phase) * 0.05, b.pos.z);
     b.group.rotation.z = Math.sin(b.wobT * 1.6 + b.phase) * 0.05;   // gentle roll
 
@@ -3527,13 +3569,16 @@
     return g;
   }
 
-  function spawnSharkAt(x, z, kind) {
+  function spawnSharkAt(x, z, kind, r) {
+    const useRng = r || rng;   // extra sharks draw from their own stream so the
+                               // main world RNG stream stays untouched
     const w = swimWaterAt(x, z);
     const level = w ? w.level : RIVER_LEVEL;
     const g = makeSharkModel();
     const s = {
       group: g, pos: new THREE.Vector3(x, 0, z), level, kind,
-      angle: rng() * Math.PI * 2, speed: 2.2, anim: rng() * 10,
+      home: new THREE.Vector3(x, 0, z),             // river guards hold their bridge
+      angle: useRng() * Math.PI * 2, speed: 2.2, anim: useRng() * 10,
       biteCd: 0, patrolT: 0.5 + Math.random() * 2, target: null
     };
     g.position.set(x, level + 0.06, z);
@@ -3561,10 +3606,16 @@
       desiredAngle = Math.atan2(target.pos.x - s.pos.x, target.pos.z - s.pos.z);
       speed = 4.5;
     } else {
-      s.patrolT -= dt;
-      if (s.patrolT <= 0) {
-        s.patrolT = 2 + Math.random() * 4;
-        s.angle += (Math.random() - 0.5) * 1.8;
+      // the bridge guards hold their crossing; the sea patrols circle their bay
+      if (s.pos.distanceToSquared(s.home) > 24 * 24) {
+        desiredAngle = Math.atan2(s.home.x - s.pos.x, s.home.z - s.pos.z);
+        s.patrolT = 0.5;
+      } else {
+        s.patrolT -= dt;
+        if (s.patrolT <= 0) {
+          s.patrolT = 2 + Math.random() * 4;
+          s.angle += (Math.random() - 0.5) * 1.8;
+        }
       }
     }
     let dh = desiredAngle - s.angle;
@@ -3574,7 +3625,9 @@
     s.angle += Math.max(-maxTurn, Math.min(maxTurn, dh));
     const nx = s.pos.x + Math.sin(s.angle) * speed * dt;
     const nz = s.pos.z + Math.cos(s.angle) * speed * dt;
-    const nw = swimWaterAt(nx, nz);
+    // sharks glide through the river channel even beneath the bridge decks,
+    // so they can hunt a swimmer all the way across a bridge crossing
+    const nw = isInsideWater(nx, nz) ? { level: RIVER_LEVEL, river: true } : swimWaterAt(nx, nz);
     if (nw) {
       s.pos.x = nx; s.pos.z = nz; s.level = nw.level;
     } else {
@@ -3748,6 +3801,24 @@
     spawnSharkAt((rng() * 2 - 1) * CENTER, -(GROUND_HALF + 12), 'sea');
     spawnSharkAt((rng() * 2 - 1) * CENTER, GROUND_HALF + 12, 'sea');
     spawnSharkAt(GROUND_HALF + 12, (rng() * 2 - 1) * CENTER, 'sea');
+    // every OTHER bridge crossing gets its own river guard too — drawn from a
+    // private RNG stream so the main world generation stays byte-identical
+    const sharkRng = mulberry32(987654321);
+    for (let i = 0; i <= N; i++) {
+      if (i === 2 || i === 5 || i === 9) continue;   // already guarded above
+      let placed = null;
+      for (let t = 0; t < 40 && !placed; t++) {
+        const x = cx(i) + (sharkRng() * 2 - 1) * 8;
+        const z = RIVER_Z + (sharkRng() * 2 - 1) * 6;
+        if (swimWaterAt(x, z)) placed = spawnSharkAt(x, z, 'river', sharkRng);
+      }
+      if (!placed) {                       // fallback: right beside the bridge lane
+        for (let off = 7.5; off <= 12 && !placed; off += 1.5) {
+          const x = cx(i) + (i % 2 ? off : -off);
+          if (swimWaterAt(x, RIVER_Z)) placed = spawnSharkAt(x, RIVER_Z, 'river', sharkRng);
+        }
+      }
+    }
 
     spawned = true;
   }
@@ -3785,6 +3856,7 @@
     corpses.length = 0; bloodParticles.length = 0; splats.length = 0;
     tracers.length = 0; smokes.length = 0; bombs.length = 0; hittables.length = 0;
     buildingBoxes.length = 0; buildingMeshes.length = 0;
+    bridgeDecks.length = 0;
     player = null;
     built = false; spawned = false;
     beatRankCache = null;
@@ -5716,8 +5788,16 @@
     const sprinting = mi.sprint && moving;
     const water = swimWaterAt(player.pos.x, player.pos.z);
     const wasSwimming = player.swimming;
-    player.swimming = !!water;
-    player.swimLevel = water ? water.level : 0;
+    // The river keeps flowing UNDER the raised bridge decks: a hero who
+    // arrives swimming glides beneath the deck and crosses the bridge in the
+    // water — he is never yanked up onto the deck to walk. (Approaching the
+    // bridge on foot still walks across the deck as before.)
+    const underBridgePass = !water && wasSwimming &&
+      Math.abs(player.pos.z - RIVER_Z) <= RIVER_HALF &&
+      groundY(player.pos.x, player.pos.z) > 0.9;
+    player.swimming = !!water || underBridgePass;
+    if (water) player.swimLevel = water.level;
+    else if (!player.swimming) player.swimLevel = 0;
     if (player.swimming && !wasSwimming) {
       toast('ĐANG BƠI… cẩn thận CÁ MẬP!');
       Sfx.blood();
@@ -5815,7 +5895,7 @@
       const a = player.anim;
       player.group.position.set(
         player.pos.x,
-        water.level - 1.05 + Math.sin(a * 1.3) * 0.05,
+        player.swimLevel - 1.05 + Math.sin(a * 1.3) * 0.05,
         player.pos.z
       );
       const legSwing = Math.sin(a) * 0.35;
@@ -6124,6 +6204,25 @@
             b.emissiveMats[j].opacity = op;
           }
           b.lastOp = op;
+        }
+      }
+    }
+    // bridge decks get the same X-ray treatment: when the hero swims under a
+    // bridge, the deck fades to glass so the chase-cam keeps him readable
+    for (let i = 0; i < bridgeDecks.length; i++) {
+      const d = bridgeDecks[i];
+      const near = !(d.maxX < ax - 12 || d.minX > ax + 12 || d.maxZ < az - 12 || d.minZ > az + 12);
+      const blocked = near && segHitsBox(ax, ay, az, bx, by, bz, d, 0.12);
+      const target = blocked ? OCCL_TARGET : 1;
+      if (target !== d.lastOp) {
+        d.fade += (target - d.fade) * Math.min(1, dt * 9);
+        const op = Math.abs(d.fade - target) < 0.012 ? target : d.fade;
+        if (op !== d.lastOp) {
+          const m = d.mesh.material;
+          m.transparent = op < 0.999;
+          m.depthWrite = !m.transparent;
+          m.opacity = op;
+          d.lastOp = op;
         }
       }
     }

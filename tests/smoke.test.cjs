@@ -427,6 +427,32 @@ check('boats actively cruise the river (moved ' + bMoved.toFixed(1) + ' u)', bMo
 check('boats stay inside the river band',
   G.boats.every(b => Math.abs(b.pos.z - G.RIVER_Z) <= G.RIVER_HALF - 1));
 
+/* NEW: a boat that meets the hero in the water stops, then moves elsewhere */
+G.respawn(); player.wanted = 0; player.armor = 100;
+// park the sharks in a far sea bay so this swim scene stays deterministic
+G.sharks.forEach(sh => { sh.pos.set(230, 0, 60); });
+const heroBoat = G.boats[0];
+const dirBefore = heroBoat.dirX;
+let swimX = heroBoat.pos.x + dirBefore * 10;
+for (let i = 0; i <= 11; i++) {            // keep the hero clear of the bridge lanes
+  const lx = i * 35 - 192.5;
+  if (Math.abs(swimX - lx) < 7) swimX = lx + 7;
+}
+player.pos.set(swimX, 0, heroBoat.pos.z);
+player.group.position.copy(player.pos);
+step(2);
+check('hero swims in front of a cruising boat', player.swimming === true);
+step(30);
+const stopX = heroBoat.pos.x;
+check('boat brakes to a stop when it meets the hero',
+  heroBoat.state === 'yield' && heroBoat.speed < 1);
+step(200);
+check('boat turns away and moves to the other side after stopping',
+  heroBoat.state === 'cruise' && heroBoat.dirX === -dirBefore &&
+  Math.abs(heroBoat.pos.x - stopX) > 1.5 &&
+  Math.sign(heroBoat.baseZ - G.RIVER_Z) !== Math.sign(player.pos.z - G.RIVER_Z));
+G.respawn();
+
 /* ================= TEST 13: bridge ramps aligned (world-group regression) ====== */
 // REGRESSION: `worldGroup.add(box).rotation.x = a` tilted the ENTIRE world,
 // burying/levitating characters & vehicles near bridges. Ramps must be their
@@ -1000,7 +1026,11 @@ player.hp = 100; player.armor = 0; player.wanted = 0;
 check('the crowd includes swimmers (' + G.NPCs.filter(n => n.swim).length + ')',
   G.NPCs.filter(n => n.swim).length >= 4);
 check('sharks patrol river and bay (' + G.sharks.length + ' sharks)', G.sharks.length >= 4);
-check('sharks spawn in water', G.sharks.every(sh => !!G.swimWaterAt(sh.pos.x, sh.pos.z)));
+check('sharks spawn in water',
+  G.sharks.every(sh => !!G.swimWaterAt(sh.pos.x, sh.pos.z) || G.isInsideWater(sh.pos.x, sh.pos.z)));
+check('every bridge crossing gets a river shark (' +
+  G.sharks.filter(s => s.kind === 'river').length + ')',
+  G.sharks.filter(s => s.kind === 'river').length === G.N + 1);
 
 const riverPt = new THREE.Vector3(-70, 0, G.RIVER_Z);
 check('river/sea water detection works', !!G.swimWaterAt(riverPt.x, riverPt.z) && !G.swimWaterAt(0, 99999));
@@ -1125,6 +1155,18 @@ player.pos.set(bridgeX + 9, 0, G.RIVER_Z);
 player.group.position.copy(player.pos);
 step(2);
 check('water beside the bridge still lets the hero swim', player.swimming === true);
+
+/* NEW: the river keeps flowing UNDER the raised deck — a hero who arrives
+   swimming crosses the bridge in the water and is never yanked up to walk */
+player.pos.set(bridgeX, 0, G.RIVER_Z - 10);        // glide into the deck shadow
+player.group.position.set(bridgeX, -0.7, G.RIVER_Z - 10);
+step(2);
+check('hero keeps swimming under the bridge deck',
+  player.swimming === true && player.group.position.y < 0.2);
+key('KeyW'); step(160); keyup('KeyW');
+check('hero crosses the bridge in the water without walking on it',
+  player.swimming === true && Math.abs(player.pos.z - G.RIVER_Z) < 6 &&
+  player.group.position.y < 0.2);
 G.respawn();
 
 // AI cars render on the bridge deck, not in the river
@@ -1402,7 +1444,15 @@ check('heads wear painted faces (eye sockets + lips)',
   headMesh.material.map.wrapS === THREE.ClampToEdgeWrapping);
 check('heads have realistic proportions (radius ' + (headMesh.geometry.parameters.radius || 0) + ' m)',
   headMesh.geometry.parameters.radius === 0.16);
-const hairMesh = faceNpc2.group.userData.hair;
+let hairMesh = faceNpc2.group.userData.hair;
+if (!hairMesh || !hairMesh.material.map || !hairMesh.material.map.image) {
+  // this passer-by rolled bald — keep making people until one has textured hair
+  for (let i = 0; i < 24; i++) {
+    const hc = mkMood('calm');
+    const hm = hc.group.userData.hair;
+    if (hm && hm.material.map && hm.material.map.image) { hairMesh = hm; break; }
+  }
+}
 check('hair shows visible strands',
   !!hairMesh && !!hairMesh.material.map && hairMesh.material.map.image && hairMesh.material.map.image.height === 128);
 const shoulderCaps = faceNpc2.group.userData.parts.filter(p => p.geometry && p.geometry.parameters &&
@@ -1638,6 +1688,9 @@ const sCar = sm.car;
 G.cars.forEach(c => { if (c !== sCar && !c.dead) { c.pos.set(400, 0, 400); c.group.position.copy(c.pos); c.prevPos.copy(c.pos); } });
 sCar.pos.set(player.pos.x + 2, 0, player.pos.z + 1);
 sCar.group.position.copy(sCar.pos);
+sCar.prevPos.copy(sCar.pos);
+sCar.laneOffset = 0;               // park it centred on its spot (lane drift is cosmetic)
+sCar.curSpeed = 0; sCar.maxSpeed = 0;   // keep it parked until the hero grabs it
 sm.target.set(player.pos.x + 40, 0, player.pos.z + 40);
 step(2);
 key('KeyF'); step(2);
