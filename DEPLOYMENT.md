@@ -113,7 +113,7 @@ cd game_test_gta
 node tests/smoke.test.cjs
 ```
 
-All 339 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
+All 340 smoke tests should pass. A browser harness also lives in `tests/browser-smoke.html` (works even without WebGL by stubbing the renderer).
 
 ### Mobile/iPad
 - Works with touch controls
@@ -183,6 +183,7 @@ game_test_gta/
 - Open World GTA Style pass 8 (matches the reference prototype): the game opens after dark at ~21:30 with a deep blue night sky, moon, stars and dark fog; a third graphics style GTA NIGHT locks the city into that neon-lit night look; armed street-gang NPCs hold three turfs (124 NPC total — they spot the hero, give chase and open fire with pistols, red dots on the minimap); full on-foot mobility — jump (Space), roll-dodge (Ctrl, i-frames + dash), crouch (C), crawl (Z) with the chase-cam dropping to match the stance; the weapon wheel cycles with Q/E while F handles action/enter-vehicle (V snaps the camera); and a mission system with the M info panel — wipe out the gang (kill N thugs), steal the marked car and deliver it to the glowing ring, or reach the meeting point — missions chain automatically with ammo/armor/health rewards
 - Mission clarity pass 9: a kill mission is never impossible — the ring always points at a LIVING thug (the target follows the nearest one in real time), the gang gets topped up with reinforcements when the mission starts, and fresh thugs are sent in if the player wipes them out mid-mission; the on-screen mission HUD shows kills X/N and how many thugs remain, the steal/visit HUD shows the remaining distance in metres, and a yellow route line + navigation arrowhead is drawn on the minimap pointing straight to the objective (the main 3D view stays clean — no floating arrow)
 - River-crossing pass 10: the river now keeps flowing UNDER the raised bridge decks — a hero who arrives swimming glides beneath the deck and crosses the bridge still in swim state (never yanked up onto the deck to walk; approaching on foot still walks the deck), the deck fades see-through whenever it stands between the chase-cam and the hero; every bridge crossing has its own great-white guard shark in the river water that chases and bites anyone swimming (they can hunt right under the decks); river boats that meet the hero in the water brake to a full stop, wait a beat, then turn around and move to the other side of the river before resuming their cruise
+- Minimap pass 11: the hero's white arrow on the minimap moves with the character and always points in the true travel direction — on foot it follows the look direction, and while driving it follows the car's heading (it previously froze at the last on-foot direction)
 - Three switchable graphics styles: UNITY CITY (modern daylight), VICE CITY (neon sunset) and GTA NIGHT (city after dark)
 - Detailed 3D pedestrians (two-segment arms/legs, ears, caps/police hats, sunglasses, skirts), detailed cars (sedan/sport/SUV/taxi/police with spinning wheels, animated doors), detailed speedboats
 - Gameplay: open world 11×11 blocks, 124 NPC (80 civilians + 24 police + 8 swimmers + 12 gangsters), 34 cars, wanted system, weapons, missions, weather/time

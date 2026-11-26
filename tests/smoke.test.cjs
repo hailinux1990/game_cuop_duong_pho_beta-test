@@ -1199,6 +1199,8 @@ check('bridge railings keep the car on the deck while steering into the side (' 
   G.groundY(railCar.pos.x, railCar.pos.z).toFixed(2) + ')',
   G.groundY(railCar.pos.x, railCar.pos.z) > 0.9 && G.player.inCar === railCar &&
   Math.abs(railCar.heading) > 0.2);
+check('the minimap hero arrow tracks the car heading while driving',
+  Math.abs(G.player.facing - railCar.heading) < 0.01);
 G.respawn();
 
 // ~ opens the command console (game freezes while typing)

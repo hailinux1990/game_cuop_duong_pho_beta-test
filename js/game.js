@@ -6024,6 +6024,8 @@
     // smoulders a few seconds, then blows up
     collideCars(car, dt, true);
     player.pos.copy(car.pos);
+    player.facing = car.heading;      // keep the hero's heading (and the minimap
+                                      // arrow) pointing where the car is driving
   }
 
   /* ---------------- Camera: third-person chase / orbit ----------------
@@ -6512,9 +6514,10 @@
       }
     }
     if (player) {
-      // the hero is a little arrow pointing where he faces
+      // the hero is a little arrow pointing where he faces (while driving it
+      // follows the car's heading so it always shows the true travel direction)
       const px = W2(player.pos.x), pz = W2(player.pos.z);
-      const a = player.facing || 0;
+      const a = player.inCar ? player.inCar.heading : (player.facing || 0);
       const fx = Math.sin(a), fz = Math.cos(a);
       const sx = -fz, sz = fx;
       mctx.fillStyle = '#fff';
