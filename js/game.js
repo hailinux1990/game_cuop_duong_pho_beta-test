@@ -483,7 +483,9 @@
     if (!ov) return;
     ov.innerHTML = '<h1 style="color:#ff4f6a">THIẾU WEBGL</h1>' +
       '<div class="sub" style="max-width:640px;line-height:1.9">Trình duyệt chưa bật WebGL.<br>' +
-      'Hãy dùng Chrome / Edge / Firefox bản mới và bật tăng tốc phần cứng, rồi tải lại trang.</div>';
+      'Hãy dùng Chrome / Edge / Firefox bản mới và bật tăng tốc phần cứng, rồi tải lại trang.<br>' +
+      'Kiểm tra nhanh tại get.webgl.org — hướng dẫn chi tiết: DEPLOYMENT.md → ' +
+      '“How to enable WebGL 3D in your browser”.</div>';
   }
 
   function initThree() {
@@ -1841,6 +1843,144 @@
     worldGroup.add(g);
   }
 
+  /* ---------------- Beach bar: open-front disco on the sand ----------------
+     A glowing party hut on the north beach with a dance floor, a drinks
+     counter, hanging disco lights and a spinning mirror ball. The front
+     (city side) stays open so the dancing crowd inside is always visible. */
+  let bar = null;
+  let barFootprint = null;
+  function isInsideBar(x, z) {
+    return !!barFootprint && x > barFootprint.minX && x < barFootprint.maxX &&
+      z > barFootprint.minZ && z < barFootprint.maxZ;
+  }
+  function barSignTexture(name, color) {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 32;
+    const g = c.getContext('2d');
+    g.fillStyle = '#1a1020'; g.fillRect(0, 0, 128, 32);
+    const col = '#' + new THREE.Color(color).getHexString();
+    g.strokeStyle = col; g.lineWidth = 2;
+    g.strokeRect(1, 1, 126, 30);
+    g.fillStyle = col;
+    g.font = 'bold 18px sans-serif';
+    g.textAlign = 'center';
+    g.fillText(name, 64, 23);
+    g.textAlign = 'left';
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.LinearFilter;
+    tex.minFilter = THREE.LinearMipmapLinearFilter;
+    return tex;
+  }
+  function buildBar(x, z) {
+    const mx = x, mz = z;
+    const W = 15, D = 11, wallH = 2.8;
+    const wallM = mat(0x3a2f44, { roughness: 0.9 });
+    const roofM = mat(0x2a2233, { roughness: 0.95 });
+    const emissiveMats = [];
+    // wooden deck (beachfront, raised a touch above the sand)
+    const deck = box(W + 0.8, 0.3, D + 0.8, 0x9a6a3a, mx, 0.15, mz);
+    deck.castShadow = true; deck.receiveShadow = true;
+    worldGroup.add(deck);
+    // back wall (sea side) + side walls; the city-facing front stays OPEN
+    const back = box(W, wallH, 0.45, 0x3a2f44, mx, 0.15 + wallH / 2, mz - D / 2 + 0.22);
+    back.material = wallM;
+    const sideL = box(0.45, wallH, D, 0x3a2f44, mx - W / 2 + 0.22, 0.15 + wallH / 2, mz);
+    sideL.material = wallM;
+    const sideR = box(0.45, wallH, D, 0x3a2f44, mx + W / 2 - 0.22, 0.15 + wallH / 2, mz);
+    sideR.material = wallM;
+    [back, sideL, sideR].forEach(m => { m.castShadow = true; worldGroup.add(m); buildingMeshes.push(m); });
+    // roof slab — registered as a see-through deck so the chase-cam can look in
+    const roof = box(W + 0.6, 0.3, D + 0.6, 0x2a2233, mx, 0.15 + wallH + 0.15, mz);
+    roof.material = roofM; roof.castShadow = true;
+    worldGroup.add(roof);
+    bridgeDecks.push({
+      minX: mx - W / 2 - 0.4, maxX: mx + W / 2 + 0.4,
+      minZ: mz - D / 2 - 0.4, maxZ: mz + D / 2 + 0.4,
+      h: wallH + 0.5, mesh: roof, fade: 1, lastOp: 1
+    });
+    // collision: thin wall strips only — the dance floor stays walkable,
+    // so the hero can step in through the open front and join the party
+    const pushWall = (a, b, c, d) => {
+      buildingBoxes.push({
+        minX: a, maxX: b, minZ: c, maxZ: d, h: wallH + 0.45, cx: mx, cz: mz,
+        mats: [wallM, wallM], emissiveMats, fade: 1, lastOp: 1
+      });
+    };
+    pushWall(mx - W / 2, mx + W / 2, mz - D / 2, mz - D / 2 + 0.5);
+    pushWall(mx - W / 2, mx - W / 2 + 0.5, mz - D / 2, mz + D / 2);
+    pushWall(mx + W / 2 - 0.5, mx + W / 2, mz - D / 2, mz + D / 2);
+    // glowing checker dance floor
+    const danceC = document.createElement('canvas');
+    danceC.width = 128; danceC.height = 128;
+    const dg = danceC.getContext('2d');
+    dg.fillStyle = '#241a30'; dg.fillRect(0, 0, 128, 128);
+    dg.fillStyle = 'rgba(255,63,164,0.85)';
+    for (let yy = 0; yy < 8; yy++) for (let xx = 0; xx < 8; xx++) {
+      if ((xx + yy) % 2 === 0) dg.fillRect(xx * 16, yy * 16, 16, 16);
+    }
+    const danceTex = new THREE.CanvasTexture(danceC);
+    const danceM = new THREE.MeshStandardMaterial({
+      map: danceTex, emissive: 0xffffff, emissiveMap: danceTex, emissiveIntensity: 0.6, roughness: 0.9
+    });
+    const dance = new THREE.Mesh(new THREE.PlaneGeometry(W - 3, D - 4.5), danceM);
+    dance.rotation.x = -Math.PI / 2;
+    dance.position.set(mx, 0.32, mz - 0.3);
+    dance.receiveShadow = true;
+    worldGroup.add(dance);
+    emissiveMats.push(danceM);
+    // drinks counter along the back wall + bottle shelf + stools
+    const counter = box(6.5, 1.0, 0.8, 0x5a3a20, mx, 0.15 + 0.5, mz - D / 2 + 1.7);
+    counter.castShadow = true;
+    worldGroup.add(counter); buildingMeshes.push(counter);
+    worldGroup.add(box(6.9, 0.08, 1.0, 0x2a1c12, mx, 0.15 + 1.04, mz - D / 2 + 1.7));
+    worldGroup.add(box(6.5, 0.5, 0.3, 0x241c16, mx, 0.15 + 1.55, mz - D / 2 + 1.05));
+    const bottleCols = [0x3f9a4f, 0xc2a02e, 0x7a3ac2, 0xc23a2e, 0x3fe0ff];
+    for (let i = 0; i < 9; i++) {
+      const bot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.34, 6),
+        mat(bottleCols[i % bottleCols.length], { roughness: 0.3 }));
+      bot.position.set(mx - 2.6 + i * 0.65, 0.15 + 1.28, mz - D / 2 + 1.05);
+      worldGroup.add(bot);
+    }
+    for (let i = 0; i < 4; i++) {
+      const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.55, 8), mat(0x8a4a2a, { roughness: 0.8 }));
+      stool.position.set(mx - 2.4 + i * 1.6, 0.15 + 0.28, mz - D / 2 + 2.8);
+      worldGroup.add(stool);
+    }
+    // hanging disco light orbs + a spinning mirror ball
+    const lights = [];
+    for (let i = 0; i < 3; i++) {
+      const lm = new THREE.MeshStandardMaterial({
+        color: 0xffffff, emissive: NEON_COLS[i], emissiveIntensity: 1.4, roughness: 0.4
+      });
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), lm);
+      orb.position.set(mx + (i - 1) * 3.5, 0.15 + wallH - 0.35, mz - 1.5 + (i % 2) * 1.6);
+      worldGroup.add(orb);
+      lights.push({ mat: lm });
+    }
+    const ballM = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.25, metalness: 0.85 });
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), ballM);
+    ball.position.set(mx, 0.15 + wallH - 0.3, mz + 0.7);
+    worldGroup.add(ball);
+    // glowing "BAR" neon sign over the open front
+    const signTex = barSignTexture('BAR', 0xff3fa4);
+    const signM = new THREE.MeshStandardMaterial({
+      map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.15
+    });
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.9, 0.25), signM);
+    sign.position.set(mx, 0.15 + wallH + 0.62, mz + D / 2 - 0.15);
+    worldGroup.add(sign);
+    emissiveMats.push(signM);
+    for (const s of [-1, 1]) {
+      worldGroup.add(box(0.12, 0.9, 0.12, 0x14121a, mx + s * 2.3, 0.15 + wallH + 0.3, mz + D / 2 - 0.15));
+    }
+    barFootprint = {
+      minX: mx - W / 2 - 1, maxX: mx + W / 2 + 1,
+      minZ: mz - D / 2 - 1, maxZ: mz + D / 2 + 1
+    };
+    bar = { x: mx, z: mz, pos: new THREE.Vector3(mx, 0, mz), lights, ball };
+    return bar;
+  }
+
   function buildCity() {
     if (built) return;
     const C = STYLES[settings.style];
@@ -2021,6 +2161,9 @@
       }
     }
 
+    // ---- the beach bar on the north shore: dance floor + party crowd ----
+    buildBar(55, -(GROUND_HALF - 7.5));
+
     // ---- tree-lined beachfront around the island rim ----
     const rim = GROUND_HALF - 5.5;
     for (let k = 0; k < 30; k++) {
@@ -2032,7 +2175,7 @@
       else if (side === 2) { x = rim; z = t; }
       else { x = -rim; z = t; }
       if (Math.abs(z - RIVER_Z) < RIVER_HALF + 7) continue;   // keep the river channel clear
-      if (isInsideBuilding(x, z)) continue;
+      if (isInsideBuilding(x, z) || isInsideBar(x, z)) continue;
       addTree(x, z);
     }
     // gentle sand dunes along the beach frame
@@ -2047,6 +2190,7 @@
       else if (side === 1) { x = t; z = -GROUND_HALF + 2 - rng() * 6; }
       else if (side === 2) { x = GROUND_HALF - 2 + rng() * 6; z = t; }
       else { x = -GROUND_HALF + 2 - rng() * 6; z = t; }
+      if (isInsideBar(x, z)) continue;
       dune.position.set(x, 0.05, z);
       worldGroup.add(dune);
     }
@@ -2170,6 +2314,9 @@
   /* ---- bridge height for rendering: characters/cars glide up the ramps ---- */
   const DECK_Y = 1.5, RAMP_LEN = 8;
   function groundY(x, z) {
+    // the beach bar's wooden deck lifts the hero (and the dancers) off the sand
+    if (barFootprint && x > barFootprint.minX && x < barFootprint.maxX &&
+        z > barFootprint.minZ && z < barFootprint.maxZ) return 0.3;
     const dz = Math.abs(z - RIVER_Z);
     if (dz > RIVER_HALF + 2 + RAMP_LEN) return 0;
     for (let i = 0; i <= N; i++) {
@@ -2507,6 +2654,7 @@
   function makeHuman(opt) {
     const g = new THREE.Group();
     const female = !!opt.female;
+    const bikini = !!opt.bikini;
     const skin = opt.skin || 0xe8b88a, shirt = opt.shirt || 0x3366ff, pants = opt.pants || 0x2c2c34;
     const variant = opt.variant === undefined ? ((skin * 7 + shirt) | 0) : opt.variant;
     const skinTex = skinTexture(skin);
@@ -2517,6 +2665,12 @@
     const shirtM = opt.shirtTex
       ? new THREE.MeshStandardMaterial({ map: opt.shirtTex, roughness: 0.82 })
       : new THREE.MeshStandardMaterial({ color: 0xffffff, map: clothTexture(shirt, variant), roughness: 0.82 });
+    // bikini look: bare skin torso/legs/arms + a colourful two-piece
+    const bikiniM = bikini ? mat(opt.bikiniColor || 0xff4f8a, { roughness: 0.75 }) : null;
+    const torsoMat = bikini ? skinM : shirtM;
+    const pelvisMat = bikini ? bikiniM : pantsM;
+    const shoulderMat = bikini ? skinM : shirtM;
+    const armUpMat = bikini ? skinM : shirtM;
     const shoeM = mat(opt.shoe || 0x18171c, { roughness: 0.75 });
     const soleM = mat(0xe8e6e0, { roughness: 0.9 });
     const eyeM = mat(0x141416, { roughness: 0.35 });
@@ -2527,20 +2681,20 @@
     const lipM = mat(0x9a4a3a, { roughness: 0.55 });
     const shoulderX = female ? 0.26 : 0.29;
     const skirt = !!opt.skirt;
-    const legsMat = skirt ? skinM : pantsM;
+    const legsMat = skirt ? skinM : (bikini ? skinM : pantsM);
     const parts = [];
     const add = (m) => { g.add(m); parts.push(m); return m; };
     const M = (geo, material) => new THREE.Mesh(geo, material);
 
     // hips, belt and tapered chest with shoulder pads
-    const pelvis = M(G_PELVIS(), pantsM); pelvis.position.set(0, 0.92, 0); pelvis.scale.x = female ? 0.94 : 1;
+    const pelvis = M(G_PELVIS(), pelvisMat); pelvis.position.set(0, 0.92, 0); pelvis.scale.x = female ? 0.94 : 1;
     const belt = M(G_BELT(), mat(opt.belt || 0x24242a, { roughness: 0.6 })); belt.position.set(0, 1.03, 0);
-    const torso = M(G_TORSO(), shirtM); torso.position.set(0, 1.29, 0); torso.scale.x = female ? 0.9 : 1;
-    const collar = M(new THREE.BoxGeometry(0.29, 0.08, 0.21), opt.suit ? whiteM : shirtM); collar.position.set(0, 1.55, 0);
+    const torso = M(G_TORSO(), torsoMat); torso.position.set(0, 1.29, 0); torso.scale.x = female ? 0.9 : 1;
+    const collar = M(new THREE.BoxGeometry(0.29, 0.08, 0.21), opt.suit ? whiteM : torsoMat); collar.position.set(0, 1.55, 0);
     add(pelvis); add(belt); add(torso); add(collar);
     // smooth shoulder caps
     for (const s of [-1, 1]) {
-      const sh = M(G_SHOULDER(), shirtM); sh.position.set(s * (female ? 0.16 : 0.18), 1.49, 0); add(sh);
+      const sh = M(G_SHOULDER(), shoulderMat); sh.position.set(s * (female ? 0.16 : 0.18), 1.49, 0); add(sh);
     }
     if (opt.suit) {
       // suit jacket: white shirt collar + tie
@@ -2554,10 +2708,15 @@
       skirtMesh = M(G_SKIRT(), mat(opt.skirtColor || pants, { roughness: 0.82 })); skirtMesh.position.set(0, 0.78, 0);
       add(skirtMesh);
     }
-    if (female && !skirt && opt.bust) {
+    if (female && !skirt && (opt.bust || bikini)) {
+      // bikini top: the chest pieces double as the two cups
       for (const s of [-1, 1]) {
-        const ch = M(G_CHEST(), shirtM); ch.position.set(s * 0.09, 1.42, 0.16); add(ch);
+        const ch = M(G_CHEST(), bikini ? bikiniM : shirtM); ch.position.set(s * 0.09, 1.42, 0.16); add(ch);
       }
+    }
+    if (bikini) {
+      // thin back strap holding the bikini top together
+      const strap = M(new THREE.BoxGeometry(0.34, 0.045, 0.02), bikiniM); strap.position.set(0, 1.44, -0.14); add(strap);
     }
 
     // neck + head + jaw + ears (realistic proportions: smaller head, longer neck)
@@ -2637,8 +2796,8 @@
     // arms: shirt sleeve + bare forearm + hand (shoulder pivots keep the contract)
     const armR = new THREE.Group(); armR.position.set(-shoulderX, 1.47, 0);
     const armL = new THREE.Group(); armL.position.set(shoulderX, 1.47, 0);
-    const armRU = M(G_ARM_UP(), shirtM), armRL = M(G_ARM_LO(), skinM), handR = M(G_HAND(), skinM);
-    const armLU = M(G_ARM_UP(), shirtM), armLL = M(G_ARM_LO(), skinM), handL = M(G_HAND(), skinM);
+    const armRU = M(G_ARM_UP(), armUpMat), armRL = M(G_ARM_LO(), skinM), handR = M(G_HAND(), skinM);
+    const armLU = M(G_ARM_UP(), armUpMat), armLL = M(G_ARM_LO(), skinM), handL = M(G_HAND(), skinM);
     handR.position.set(0, -0.56, 0.02);
     handL.position.set(0, -0.56, 0.02);
     armR.add(armRU, armRL, handR);
@@ -3133,11 +3292,12 @@
 
   /* Vice City street palette: pastel shirts, tan/brown skins, loud caps */
   const CIV_SHIRTS = [0xff6f91, 0x40e0d0, 0xffd166, 0x9b7bff, 0xff9f68, 0x6ad1ff, 0xf3f0e4, 0xff4fd8, 0xa0e061, 0xf7e9d0];
+  const BIKINI_COLS = [0xff4f8a, 0xff2a4a, 0x40e0d0, 0xffd166, 0x9b7bff, 0xff6a3f, 0x3fe0ff, 0xf3f0e4];
   const CIV_PANTS = [0x2b3140, 0x3a3a48, 0x5a4a3a, 0x555a66, 0x1f2a3a, 0x4a3f55, 0x6b6b78];
   const SKINS = [0xf1c8a0, 0xe0ac7a, 0xc98d5a, 0xa86f45, 0x8a5a3a, 0x6b4024, 0xf5d6b8];
   const HAIRS = [0x120d09, 0x24180f, 0x3a2414, 0x5a3a1c, 0x8a6a3a, 0xd8c08a, 0x2a2a2e];
   const CAPS = [0xff4f6a, 0x3f8f5f, 0x2f6fbf, 0xffd25e, 0x9b6bff];
-  function makeNPC(type) {
+  function makeNPC(type, kind) {
     const isPolice = type === 'police';
     const isEnemy = type === 'enemy';
     let opt;
@@ -3159,6 +3319,44 @@
         holster: true, belt: 0x0c0c10, shoe: 0x121216,
         scale: 0.95 + rng() * 0.1
       };
+    } else if (kind === 'bikini') {
+      // beautiful beach/party girl in a colourful two-piece bikini
+      opt = {
+        female: true, bikini: true,
+        bikiniColor: BIKINI_COLS[(rng() * BIKINI_COLS.length) | 0],
+        skin: SKINS[(rng() * SKINS.length) | 0],
+        hair: HAIRS[(rng() * HAIRS.length) | 0],
+        hairStyle: rng() < 0.5 ? 'long' : 'bun',
+        bust: true,
+        sunglasses: rng() < 0.45,
+        necklace: rng() < 0.5,
+        shoe: [0xf5f2ea, 0x2a2a30, 0xc26a8a][(rng() * 3) | 0],
+        belt: 0xffd24f,
+        scale: 0.94 + rng() * 0.08
+      };
+    } else if (kind === 'party') {
+      // bar party-goer: bright tropical shirt, shades, maybe a skirt + necklace
+      const pf = rng() < 0.5;
+      opt = {
+        female: pf,
+        shirt: CIV_SHIRTS[(rng() * CIV_SHIRTS.length) | 0],
+        pants: CIV_PANTS[(rng() * CIV_PANTS.length) | 0],
+        skin: SKINS[(rng() * SKINS.length) | 0],
+        hair: HAIRS[(rng() * HAIRS.length) | 0],
+        hairStyle: pf ? (rng() < 0.5 ? 'long' : 'bun') : 'short',
+        sunglasses: rng() < 0.5,
+        bust: pf && rng() < 0.7,
+        necklace: rng() < 0.6,
+        shirtTex: shirtTexture(CIV_SHIRTS[(rng() * CIV_SHIRTS.length) | 0],
+          PRINT_ACCENTS[(rng() * PRINT_ACCENTS.length) | 0], (rng() * 4) | 0),
+        shoe: [0x1b1a20, 0x2a2a30, 0xc2a02e][(rng() * 3) | 0],
+        belt: 0x24242a,
+        scale: 0.94 + rng() * 0.1
+      };
+      if (pf && rng() < 0.4) {
+        opt.skirt = true;
+        opt.skirtColor = [0xff6f91, 0x40e0d0, 0xffd166, 0x9b7bff, 0xf3f0e4][(rng() * 5) | 0];
+      }
     } else {
       const female = rng() < 0.42;
       const hairRoll = rng();
@@ -3204,6 +3402,7 @@
 
     const npc = {
       type, group: g, pos: start.clone(),
+      bikini: kind === 'bikini',
       hp: isPolice ? 70 : (isEnemy ? 60 : 40), maxHp: isPolice ? 70 : (isEnemy ? 60 : 40),
       state: isPolice ? 'patrol' : (isEnemy ? 'gang' : 'walk'),
       home: isEnemy ? start.clone() : null,
@@ -3661,6 +3860,67 @@
     }
     return pos.clone();
   }
+  // a dry spot on the sand ring around the island (bikini girls stroll here)
+  function randomBeachPoint(r) {
+    const useRng = r || rng;
+    for (let t = 0; t < 20; t++) {
+      const side = (useRng() * 4) | 0;
+      const along = (useRng() * 2 - 1) * (GROUND_HALF - 10);
+      const b = GROUND_HALF - 1.5 - useRng() * 4;
+      let x, z;
+      if (side === 0) { x = along; z = -b; }
+      else if (side === 1) { x = along; z = b; }
+      else if (side === 2) { x = b; z = along; }
+      else { x = -b; z = along; }
+      if (!isInsideBuilding(x, z) && !isInsideBar(x, z) && !swimWaterAt(x, z)) {
+        return new THREE.Vector3(x, 0, z);
+      }
+    }
+    return null;
+  }
+  // a beach stroll target along the SAME shore, so the girls never cut
+  // through the city to reach the other side of the island
+  function beachPointNear(pos, range) {
+    for (let t = 0; t < 12; t++) {
+      const along = (rng() * 2 - 1) * range;
+      let x = pos.x, z = pos.z;
+      if (Math.abs(pos.z) > Math.abs(pos.x)) {
+        z = (pos.z > 0 ? 1 : -1) * (GROUND_HALF - 1.5 - rng() * 4);
+        x = Math.max(-GROUND_HALF + 3, Math.min(GROUND_HALF - 3, pos.x + along));
+      } else {
+        x = (pos.x > 0 ? 1 : -1) * (GROUND_HALF - 1.5 - rng() * 4);
+        z = Math.max(-GROUND_HALF + 3, Math.min(GROUND_HALF - 3, pos.z + along));
+      }
+      if (!isInsideBuilding(x, z) && !isInsideBar(x, z) &&
+          !swimWaterAt(x, z) && !isInsideWater(x, z)) {
+        return new THREE.Vector3(x, 0, z);
+      }
+    }
+    return pos.clone();
+  }
+  // party animation: bounce to the beat, wave the arms, step in place
+  function updateDancer(npc, dt) {
+    npc.anim += dt * 2.2;
+    const a = npc.anim;
+    npc.danceT = (npc.danceT === undefined ? 1 : npc.danceT) - dt;
+    if (npc.danceT <= 0) {
+      npc.danceT = 1.5 + rng() * 2.5;
+      npc.danceFace = npc.facing + (rng() * 2 - 1) * 1.4;
+    }
+    npc.facing = angLerp(npc.facing, npc.danceFace || 0, Math.min(1, dt * 2.5));
+    const u = npc.group.userData;
+    npc.group.position.set(npc.pos.x, 0.32 + Math.abs(Math.sin(a * 2)) * 0.14, npc.pos.z);
+    npc.group.rotation.y = npc.facing;
+    npc.group.rotation.z = Math.sin(a * 2) * 0.07;
+    u.armL.rotation.x = -1.95 + Math.sin(a * 2.1) * 0.45;
+    u.armR.rotation.x = -1.95 + Math.sin(a * 2.1 + 1.5) * 0.45;
+    u.armL.rotation.z = Math.sin(a * 1.2) * 0.5;
+    u.armR.rotation.z = -Math.sin(a * 1.2 + 0.6) * 0.5;
+    u.legL.rotation.x = Math.sin(a * 2) * 0.32;
+    u.legR.rotation.x = -Math.sin(a * 2) * 0.32;
+    if (u.head) u.head.rotation.y = Math.sin(a * 0.7) * 0.35;
+    updateFace(npc, dt);
+  }
   function updateSwimmer(npc, dt) {
     const water = swimWaterAt(npc.pos.x, npc.pos.z);
     if (!water) {                         // shoved onto land (e.g. tests): stand still
@@ -3817,6 +4077,27 @@
           const x = cx(i) + (i % 2 ? off : -off);
           if (swimWaterAt(x, RIVER_Z)) placed = spawnSharkAt(x, RIVER_Z, 'river', sharkRng);
         }
+      }
+    }
+
+    // ---- the beach bar party: a packed dance floor with bikini beauties ----
+    if (bar) {
+      const partyRng = mulberry32(20241124);
+      for (let i = 0; i < 12; i++) {
+        const n = makeNPC('civilian', i < 5 ? 'bikini' : 'party');
+        n.dance = true; n.state = 'dance';
+        n.pos.set(bar.x + (partyRng() * 2 - 1) * 5.5, 0, bar.z + (partyRng() * 2 - 1) * 3);
+        n.group.position.copy(n.pos);
+        n.home = n.pos.clone(); n.target = null;
+        n.mood = partyRng() < 0.5 ? 'happy' : 'laugh';
+      }
+      // bikini girls strolling along the sandy shore
+      for (let i = 0; i < 5; i++) {
+        const n = makeNPC('civilian', 'bikini');
+        n.beach = true;
+        const p = randomBeachPoint(partyRng);
+        if (p) { n.pos.copy(p); n.group.position.copy(p); n.home = p.clone(); }
+        n.target = null; n.wanderTimer = 0;
       }
     }
 
@@ -4680,6 +4961,20 @@
 
     if (npc.swim) { updateSwimmer(npc, dt); return; }
 
+    // party people keep dancing inside the beach bar — unless a wanted hero
+    // barges in, then the whole dance floor scatters
+    if (npc.dance) {
+      if (player && !player.dead && player.wanted > 0 && npc.pos.distanceTo(player.pos) < 10) {
+        npc.dance = false;
+        npc.state = 'flee';
+        npc.fleeDir = npc.pos.clone().sub(player.pos).setY(0).normalize();
+        npc.fleeT = 6;
+      } else {
+        updateDancer(npc, dt);
+        return;
+      }
+    }
+
     let moveDir = new THREE.Vector3();
     let moving = false;
 
@@ -4787,7 +5082,7 @@
           if (d < 9) { npc.state = 'flee'; npc.fleeDir = npc.pos.clone().sub(player.pos).setY(0).normalize(); npc.fleeT = 5; }
         } else {
           if (!npc.target || npc.wanderTimer <= 0 || npc.pos.distanceTo(npc.target) < 1) {
-            npc.target = randomLocalPoint(npc.pos, 6);
+            npc.target = npc.beach ? beachPointNear(npc.pos, 30) : randomLocalPoint(npc.pos, 6);
             npc.wanderTimer = 2 + rng() * 6;
           }
           npc.wanderTimer -= dt;
@@ -6230,6 +6525,33 @@
     }
   }
 
+  /* ---------------- Beach bar FX: disco lights + a thumping beat ----------------
+     The light orbs cycle through the neon palette and the mirror ball spins;
+     a simple four-on-the-floor kick + hi-hat plays while the hero is near. */
+  const barBeat = { playing: false, next: 0 };
+  function updateBarFX(dt) {
+    if (!bar) return;
+    const t = performance.now();
+    for (let i = 0; i < bar.lights.length; i++) {
+      const L = bar.lights[i];
+      L.mat.emissive.setHex(NEON_COLS[Math.floor(t / 260 + i * 1.7) % NEON_COLS.length]);
+    }
+    bar.ball.rotation.y += dt * 1.2;
+    if (player && !player.dead && Sfx.ctx) {
+      const d = player.pos.distanceTo(bar.pos);
+      if (d < 42 && !barBeat.playing) { barBeat.playing = true; barBeat.next = 0; }
+      else if (d > 55 && barBeat.playing) barBeat.playing = false;
+      if (barBeat.playing) {
+        const now = Sfx.ctx.currentTime;
+        if (now >= barBeat.next) {
+          Sfx.tone(52, 0.14, 'sine', 0.5, 34);      // bass drum thump
+          Sfx.noise(0.03, 0.09, 7000);              // hi-hat tick
+          barBeat.next = now + 0.5;                 // ~120 BPM
+        }
+      }
+    }
+  }
+
   /* ---------------- FX update ---------------- */
   function updateFX(dt) {
     for (let i = bloodParticles.length - 1; i >= 0; i--) {
@@ -6475,6 +6797,11 @@
     g.fillStyle = hex(C.bridge);
     for (let i = 0; i <= N; i++) {
       g.fillRect(W2(cx(i) - ROAD / 2), W2(RIVER_Z - RIVER_HALF), ROAD * mScale, RIVER_HALF * 2 * mScale);
+    }
+    // the beach bar glows pink on the sand
+    if (bar) {
+      g.fillStyle = '#ff4fa0';
+      g.fillRect(W2(bar.x - 7.5), W2(bar.z - 5.5), 15 * mScale, 11 * mScale);
     }
   }
   function updateMinimap() {
@@ -6854,6 +7181,7 @@
     });
 
     updateFX(dt);
+    updateBarFX(dt);
     updateCamera(dt);
     updateVehicleHUD();
     updateReloadHUD();
@@ -7165,6 +7493,7 @@
     openPause,
     resumeGame,
     sharks, swimWaterAt, bombs,
+    get bar() { return bar; },
     hurtPlayer(dmg) { playerTakeDamage(dmg); },
     applyCheat,
     get cheatConsoleOpen() { return cheatOpen; },

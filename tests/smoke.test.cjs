@@ -135,7 +135,7 @@ check('water detection works', G.isInsideWater(0, G.RIVER_Z) && !G.isInsideWater
 check('player spawns on open ground (no building/water)',
   !G.isInsideBuilding(player.pos.x, player.pos.z) && !G.isInsideWater(player.pos.x, player.pos.z));
 check('world spawned: NPCs=' + G.NPCs.length + ' cars=' + G.cars.length,
-  G.NPCs.length === 124 && G.cars.length === 34);
+  G.NPCs.length === 141 && G.cars.length === 34);
 check('every AI car has a visible driver mesh', G.cars.every(c => c.driverMesh !== null));
 
 /* ================= TEST 1: AK-47 with 500 rounds ================= */
@@ -453,6 +453,30 @@ check('boat turns away and moves to the other side after stopping',
   Math.sign(heroBoat.baseZ - G.RIVER_Z) !== Math.sign(player.pos.z - G.RIVER_Z));
 G.respawn();
 
+/* NEW: beach bar — a packed dance floor with bikini beauties on the sand */
+check('a beach bar with disco lights stands on the sand',
+  !!G.bar && G.bar.lights.length >= 2 && !G.isInsideWater(G.bar.x, G.bar.z));
+const dancers = G.NPCs.filter(n => n.dance);
+check('the bar is packed with dancers (' + dancers.length + ')', dancers.length >= 10);
+check('beautiful bikini girls dance in the bar (' +
+  dancers.filter(n => n.bikini).length + ')', dancers.filter(n => n.bikini).length >= 4);
+const beachGirls = G.NPCs.filter(n => n.beach);
+check('bikini girls stroll along the beach (' + beachGirls.length + ')', beachGirls.length >= 3);
+// earlier tests parked every NPC at (400,400) — bring the party back where it belongs
+dancers.forEach((n, i) => {
+  n.pos.set(G.bar.x + ((i % 5) - 2) * 1.8, 0, G.bar.z + (Math.floor(i / 5) - 1) * 1.6);
+  n.group.position.copy(n.pos);
+});
+beachGirls.forEach((n, i) => { n.pos.set(40 + i * 15, 0, -210); n.group.position.copy(n.pos); });
+step(2);
+check('beach girls stay on the dry sand',
+  beachGirls.every(n => !G.swimWaterAt(n.pos.x, n.pos.z) &&
+    !G.isInsideBuilding(n.pos.x, n.pos.z)));
+step(40);
+check('dancers keep dancing inside the bar',
+  dancers.every(n => n.dance && Math.abs(n.pos.x - G.bar.x) < 8 &&
+    Math.abs(n.pos.z - G.bar.z) < 7));
+
 /* ================= TEST 13: bridge ramps aligned (world-group regression) ====== */
 // REGRESSION: `worldGroup.add(box).rotation.x = a` tilted the ENTIRE world,
 // burying/levitating characters & vehicles near bridges. Ramps must be their
@@ -720,7 +744,7 @@ G.applyWorldStyle('neon');
 step(3);
 check('style switch rebuilds the city in VICE CITY neon mode', G.settings.style === 'neon' && G.isNeon() === true);
 check('style switch keeps the world alive (124 NPC + 34 xe + hero)',
-  !!player && !player.dead && G.NPCs.length === 124 && G.cars.length === 34);
+  !!player && !player.dead && G.NPCs.length === 141 && G.cars.length === 34);
 const palmTrunks = countWorld(o => o.geometry.type === 'CylinderGeometry' && o.material &&
   o.material.color && o.material.color.getHex() === 0x7a5a38);
 check('VICE CITY palms return (' + palmTrunks + ' trunks)', palmTrunks >= 20);
@@ -735,7 +759,7 @@ check('neon building facades start OPAQUE (no transparent pipeline cost)', neonF
 G.applyWorldStyle('modern');
 step(3);
 check('style can switch back to UNITY CITY modern', G.settings.style === 'modern' && G.isNeon() === false &&
-  !!player && G.NPCs.length === 124 && G.cars.length === 34);
+  !!player && G.NPCs.length === 141 && G.cars.length === 34);
 G.setTimeOfDay('afternoon'); G.setWeather('clear'); step(2);
 check('modern mode restores the crisp daylight fog', G.scene.fog && G.scene.fog.color.getHex() === 0xbfd0de);
 
@@ -1579,7 +1603,7 @@ check('the moon is up and the stars are out', G.timeInfo.moon > 0.9 && G.timeInf
 G.applyWorldStyle('night'); step(3);
 check('GTA NIGHT style is selectable', G.settings.style === 'night' && G.isNeon() === true);
 check('GTA NIGHT keeps the world alive (124 NPC + 34 xe + hero)',
-  !!player && !player.dead && G.NPCs.length === 124 && G.cars.length === 34);
+  !!player && !player.dead && G.NPCs.length === 141 && G.cars.length === 34);
 const neonNight = countWorld(o => o.material && o.material.emissive &&
   (o.material.emissive.r + o.material.emissive.g + o.material.emissive.b) > 0.5);
 check('GTA NIGHT dresses the skyline in neon (' + neonNight + ' emissive)', neonNight >= 50);
