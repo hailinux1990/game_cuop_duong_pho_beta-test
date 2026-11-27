@@ -172,6 +172,52 @@
   function isInsideWater(x, z) { return Math.abs(z - RIVER_Z) < RIVER_HALF; }
   const SPAWN = new THREE.Vector3(cx(4), 0, cz(4));   // safe road intersection
 
+  /* ---- Car background music (procedural) ----
+     Original 3/4 film-score waltz in D minor, composed for this game in the
+     romantic style of Italian cinema love themes (soft strings lead, oom-pah
+     accompaniment). 16 bars @ 72 BPM = 40 s, loops while the hero drives. */
+  const CAR_MUSIC_LEN = 40;
+  const CAR_SPB = 60 / 72;                      // seconds per beat
+  const CAR_BAR = CAR_SPB * 3;                  // seconds per bar (3/4)
+  // 16 bars: [bass midi, soft pad triad, waltz pluck pair]
+  const CAR_CHORDS = [
+    [38, [62, 65, 69], [65, 69]],   // Dm
+    [46, [58, 62, 65], [62, 65]],   // Bb
+    [43, [55, 58, 62], [58, 62]],   // Gm
+    [33, [57, 61, 64], [61, 64]],   // A7
+    [38, [62, 65, 69], [65, 69]],   // Dm
+    [46, [58, 62, 65], [62, 65]],   // Bb
+    [43, [55, 58, 62], [58, 62]],   // Gm
+    [33, [57, 61, 64], [61, 64]],   // A7
+    [41, [53, 57, 60], [57, 60]],   // F
+    [48, [52, 55, 60], [55, 60]],   // C
+    [46, [58, 62, 65], [62, 65]],   // Bb
+    [41, [53, 57, 60], [57, 60]],   // F
+    [46, [58, 62, 65], [62, 65]],   // Bb
+    [43, [55, 58, 62], [58, 62]],   // Gm
+    [33, [57, 61, 64], [61, 64]],   // A7
+    [38, [62, 65, 69], [65, 69]]    // Dm
+  ];
+  // Lead melody: [midi, beat 0..47, duration in beats]
+  const CAR_MELODY = [
+    [65, 0, 0.5], [69, 0.5, 1.5], [72, 2, 1],
+    [74, 3, 1.5], [70, 4.5, 1.5],
+    [69, 6, 1], [70, 7, 1], [72, 8, 1],
+    [76, 9, 1.5], [73, 10.5, 1.5],
+    [74, 12, 2], [77, 14, 1],
+    [74, 15, 1], [72, 16, 1], [70, 17, 1],
+    [69, 18, 1], [70, 19, 1], [72, 20, 1],
+    [73, 21, 3],
+    [77, 24, 1], [76, 25, 1], [74, 26, 1],
+    [72, 27, 1.5], [76, 28.5, 1.5],
+    [74, 30, 1.5], [70, 31.5, 1.5],
+    [69, 33, 1], [72, 34, 1], [77, 35, 1],
+    [74, 36, 2], [72, 38, 1],
+    [70, 39, 1], [69, 40, 1], [67, 41, 1],
+    [69, 42, 1], [73, 43, 1], [76, 44, 1],
+    [74, 45, 3]
+  ];
+
   /* ---------------- Audio (procedural) ---------------- */
   const Sfx = {
     ctx: null, master: null, enabled: true,
@@ -371,6 +417,93 @@
       o.connect(lp); lp.connect(g); g.connect(this.master);
       for (let k = 0; k < 7; k++) o.frequency.setValueAtTime(k % 2 ? 720 : 560, t + k);
       o.start(t); o.stop(t + 7.2);
+    },
+
+    /* ---- car radio: romantic film-score waltz while driving ---- */
+    carMusic: null,
+    carMusicOn() {
+      if (!this.ctx || this.carMusic) return;
+      const m = { on: true, bus: null, timer: 0, nodes: [] };
+      this.carMusic = m;
+      const ctx = this.ctx, t = ctx.currentTime;
+      m.bus = ctx.createGain();
+      m.bus.gain.setValueAtTime(0.0001, t);
+      m.bus.gain.linearRampToValueAtTime(0.8, t + 1.4);   // fade in like a car radio
+      m.bus.connect(this.master);
+      const pass = () => {
+        if (!this.carMusic || this.carMusic !== m) return;
+        this.carMusicPass(m);
+        m.timer = setTimeout(pass, CAR_MUSIC_LEN * 1000);
+      };
+      pass();
+    },
+    carMusicPass(m) {
+      if (!this.ctx) return;
+      const now = this.ctx.currentTime;
+      m.nodes = m.nodes.filter(e => e.end > now);         // free finished voices
+      for (let b = 0; b < CAR_CHORDS.length; b++) {
+        const ch = CAR_CHORDS[b], t0 = b * CAR_BAR;
+        this.carMusicNote(m, ch[0], t0, 2.3, 'sine', 0.1, 0.03);              // bass on beat 1
+        ch[1].forEach(n => this.carMusicNote(m, n, t0, 2.4, 'sine', 0.04, 0.5));  // soft string pad
+        this.carMusicNote(m, ch[2][0], t0 + CAR_SPB, 0.55, 'triangle', 0.035, 0.006);  // oom-pah-pah
+        this.carMusicNote(m, ch[2][1], t0 + CAR_SPB * 2, 0.55, 'triangle', 0.035, 0.006);
+      }
+      CAR_MELODY.forEach(n => {
+        const at = n[1] * CAR_SPB, du = n[2] * CAR_SPB + 0.12;
+        this.carMusicNote(m, n[0], at, du, 'sine', 0.15, 0.16, true);         // lead "strings" + vibrato
+        this.carMusicNote(m, n[0] - 12, at, du, 'triangle', 0.05, 0.16);      // warm octave below the lead
+      });
+    },
+    carMusicNote(m, midi, when, dur, type, vol, atk, vibrato) {
+      if (!this.ctx) return;
+      const ctx = this.ctx;
+      const f = 440 * Math.pow(2, (midi - 69) / 12);
+      const t = ctx.currentTime + when;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type || 'sine';
+      o.frequency.value = f;
+      if (vibrato) {
+        const lfo = ctx.createOscillator(), lg = ctx.createGain();
+        lfo.frequency.value = 5.4; lg.gain.value = f * 0.004;
+        lfo.connect(lg); lg.connect(o.frequency);
+        lfo.start(t); lfo.stop(t + dur + 0.1);
+      }
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(vol, t + atk);
+      g.gain.setValueAtTime(vol, t + Math.max(atk, dur - 0.3));
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(m.bus);
+      o.start(t); o.stop(t + dur + 0.1);
+      m.nodes.push({ src: o, end: t + dur + 0.15 });
+    },
+    carMusicOff() {
+      const m = this.carMusic;
+      if (!m) return;
+      this.carMusic = null;
+      clearTimeout(m.timer);
+      if (this.ctx && m.bus) {
+        const bus = m.bus, t = this.ctx.currentTime;
+        try {
+          bus.gain.cancelScheduledValues(t);
+          bus.gain.setValueAtTime(bus.gain.value, t);
+          bus.gain.linearRampToValueAtTime(0.0001, t + 0.6);
+        } catch (e) {}
+        setTimeout(() => {
+          m.nodes.forEach(e => { try { e.src.stop(); } catch (err) {} });
+          m.nodes.length = 0;
+          try { bus.disconnect(); } catch (err) {}
+        }, 700);
+      }
+    },
+    carMusicDuck(on) {                                    // silence during pause menus
+      const m = this.carMusic;
+      if (!m || !m.bus || !this.ctx) return;
+      const t = this.ctx.currentTime;
+      try {
+        m.bus.gain.cancelScheduledValues(t);
+        m.bus.gain.setValueAtTime(m.bus.gain.value, t);
+        m.bus.gain.linearRampToValueAtTime(on ? 0.0001 : 0.8, t + 0.4);
+      } catch (e) {}
     }
   };
 
@@ -4415,6 +4548,7 @@
     splats.forEach(p => drop(p.mesh));
     corpses.forEach(n => drop(n.group));
     if (player) { if (player.inCar) { player.inCar.driver = null; player.inCar = null; } drop(player.group); }
+    Sfx.carMusicOff();
     while (worldGroup.children.length) worldGroup.remove(worldGroup.children[0]);
     NPCs.length = 0; cars.length = 0; boats.length = 0; sharks.length = 0;
     corpses.length = 0; bloodParticles.length = 0; splats.length = 0;
@@ -4701,6 +4835,7 @@
     if (player.hp <= 0) {
       player.hp = 0;
       player.dead = true;
+      Sfx.carMusicOff();
       showWasted();
     }
     updateHealthHUD();
@@ -5197,6 +5332,7 @@
       player.group.position.copy(ep);
       scene.add(player.group);
       player.inCar = null;
+      Sfx.carMusicOff();
       updateHealthHUD();
       playerTakeDamage(55, car.pos);
       toast('XE NỔ TUNG! Bạn bắn ra ngoài kịp lúc...');
@@ -5949,9 +6085,10 @@
         ? 'Trộm xe CẢNH SÁT! Cảnh sát đang truy đuổi!'
         : 'Đã trộm xe — tài xế bị đẩy ra và bỏ chạy!');
     } else {
-      toast('Đã lên xe — WASD lái, F xuống xe');
+      toast('Đã lên xe — WASD lái, F xuống xe 🎵');
     }
     Sfx.car();
+    Sfx.carMusicOn();
   }
   function exitCar() {
     if (!player || !player.inCar) return;
@@ -5975,6 +6112,7 @@
     scene.add(player.group);
     player.inCar = null;
     Sfx.click();
+    Sfx.carMusicOff();
   }
 
   /* ---------------- Input ---------------- */
@@ -7030,6 +7168,7 @@
   function respawn() {
     player.hp = player.maxHp; player.dead = false; player.wanted = 0; player.crimeTimer = 0;
     if (player.inCar) { player.inCar.driver = null; player.inCar = null; }
+    Sfx.carMusicOff();
     player.pos.copy(SPAWN); player.group.position.copy(player.pos);
     player.vel.set(0, 0, 0);
     player.armor = 0;
@@ -7445,6 +7584,7 @@
     if (!mission) { toast('Chưa có nhiệm vụ — hãy đợi vài giây'); return; }
     missionPanelOpen = true;
     paused = true;
+    Sfx.carMusicDuck(true);
     if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
     hideOverlay(settingsOverlay); hideOverlay(aboutOverlay);
     updateMissionPanel();
@@ -7456,6 +7596,7 @@
     missionPanelOpen = false;
     hideOverlay(missionOverlay);
     paused = false;
+    Sfx.carMusicDuck(false);
     tryPointerLock();
   }
 
@@ -7605,6 +7746,7 @@
   function openPause() {
     if (!player || player.dead) return;
     paused = true;
+    Sfx.carMusicDuck(true);
     if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
     hideOverlay(settingsOverlay); hideOverlay(aboutOverlay); hideOverlay(missionOverlay);
     missionPanelOpen = false;
@@ -7613,6 +7755,7 @@
   function resumeGame() {
     hideGameOverlays();
     paused = false;
+    Sfx.carMusicDuck(false);
     tryPointerLock();
   }
 
@@ -7629,6 +7772,7 @@
     cheatWasPaused = paused;
     hideGameOverlays();
     paused = true;                                 // freeze the world while typing the code
+    Sfx.carMusicDuck(true);
     if (document.exitPointerLock) { try { document.exitPointerLock(); } catch (e) {} }
     showOverlay(cheatOverlay);
     if (cheatInput) { cheatInput.value = ''; if (cheatInput.focus) cheatInput.focus(); }
@@ -7640,7 +7784,7 @@
     cheatOpen = false;
     hideOverlay(cheatOverlay);
     if (cheatWasPaused) showOverlay(pauseOverlay);  // came from the pause menu: back to it
-    else { paused = false; tryPointerLock(); }
+    else { paused = false; Sfx.carMusicDuck(false); tryPointerLock(); }
   }
   function runCheatCommand(raw) {
     if (!cheatOpen) return;
