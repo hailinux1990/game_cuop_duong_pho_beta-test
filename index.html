@@ -71,12 +71,12 @@
   .mTitle { font-size:20px; letter-spacing:2px; color:var(--ui); margin-bottom:10px; }
   .mDesc { font-size:14px; line-height:1.7; color:#eee; letter-spacing:1px; margin-bottom:10px; text-align:left; }
   .mProg { font-size:13px; letter-spacing:2px; color:var(--cyan); margin-bottom:12px; }
-  /* ---- Minimap ---- */
-  #minimapBox { top:14px; right:14px; border:2px solid #000; box-shadow:0 0 0 2px rgba(255,111,181,.55); background:#000; }
+  /* ---- Minimap (wide full-city map, GTA IV street-map style) ---- */
+  #minimapBox { top:14px; right:14px; border:2px solid #000; box-shadow:0 0 0 2px rgba(255,111,181,.55), 0 6px 24px rgba(0,0,0,.5); background:#000; }
   #minimap { display:block; image-rendering: pixelated; }
-  #minimapBox .caption { font-size:9px; letter-spacing:2px; color:var(--cyan); text-align:center; padding:2px 0; }
+  #minimapBox .caption { font-size:9px; letter-spacing:3px; color:var(--cyan); text-align:center; padding:3px 0; }
   /* ---- In-game menu button + FPS ---- */
-  #menuBtn { top:196px; right:14px; z-index:12; pointer-events:auto; cursor:pointer;
+  #menuBtn { top:352px; right:14px; z-index:12; pointer-events:auto; cursor:pointer;
              width:46px; height:40px; padding:0; font-family:inherit; font-size:18px;
              color:var(--cyan); background:rgba(18,8,26,.7); border:2px solid #000;
              box-shadow:0 0 0 2px rgba(79,240,232,.5); }
@@ -176,8 +176,8 @@
   </div>
 
   <div id="minimapBox" class="hud">
-    <canvas id="minimap" width="150" height="150"></canvas>
-    <div class="caption">MAP</div>
+    <canvas id="minimap" width="300" height="300"></canvas>
+    <div class="caption">BẢN ĐỒ THÀNH PHỐ</div>
   </div>
 
   <button id="menuBtn" class="hud" title="Menu tạm dừng (ESC)">☰</button>
