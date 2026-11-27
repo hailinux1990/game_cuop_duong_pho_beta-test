@@ -42,7 +42,7 @@ function makeEl(id) {
     remove() {},
     addEventListener(t, f) { if (typeof f === 'function') { (el._h[t] = el._h[t] || []).push(f); } },
     getContext() { return bhFactory(); },
-    width: id === 'minimap' ? 150 : 300,
+    width: id === 'minimap' ? 300 : 300,
     height: 150
   };
   return el;
@@ -135,7 +135,7 @@ check('water detection works', G.isInsideWater(0, G.RIVER_Z) && !G.isInsideWater
 check('player spawns on open ground (no building/water)',
   !G.isInsideBuilding(player.pos.x, player.pos.z) && !G.isInsideWater(player.pos.x, player.pos.z));
 check('world spawned: NPCs=' + G.NPCs.length + ' cars=' + G.cars.length,
-  G.NPCs.length === 141 && G.cars.length === 34);
+  G.NPCs.length === 159 && G.cars.length === 34);
 check('every AI car has a visible driver mesh', G.cars.every(c => c.driverMesh !== null));
 
 /* ================= TEST 1: AK-47 with 500 rounds ================= */
@@ -456,7 +456,7 @@ G.respawn();
 /* NEW: beach bar — a packed dance floor with bikini beauties on the sand */
 check('a beach bar with disco lights stands on the sand',
   !!G.bar && G.bar.lights.length >= 2 && !G.isInsideWater(G.bar.x, G.bar.z));
-const dancers = G.NPCs.filter(n => n.dance);
+const dancers = G.NPCs.filter(n => n.dance && n.barIdx === undefined);
 check('the bar is packed with dancers (' + dancers.length + ')', dancers.length >= 10);
 check('beautiful bikini girls dance in the bar (' +
   dancers.filter(n => n.bikini).length + ')', dancers.filter(n => n.bikini).length >= 4);
@@ -476,6 +476,60 @@ step(40);
 check('dancers keep dancing inside the bar',
   dancers.every(n => n.dance && Math.abs(n.pos.x - G.bar.x) < 8 &&
     Math.abs(n.pos.z - G.bar.z) < 7));
+
+/* NEW: interior bars — 3 walk-in venues inside city buildings, full of
+   dancing bikini girls; kill everyone and a fresh crowd arrives ~10 s later */
+check('three walk-in bars stand inside city buildings', G.interiorBars.length === 3);
+const ib0 = G.interiorBars[0];
+// earlier tests parked every NPC far away — bring the bar guests back inside
+G.NPCs.filter(n => n.barIdx !== undefined).forEach(n => {
+  const b = G.interiorBars[n.barIdx];
+  if (!b) return;
+  n.pos.set(b.x, 0, b.z);
+  n.group.position.copy(n.pos);
+  n.home = n.pos.clone();
+  n.target = null;
+});
+check('bar rooms are walkable (no building collision inside)',
+  !G.isInsideBuilding(ib0.x, ib0.z) && G.groundY(ib0.x, ib0.z) === 0);
+check('bar walls still block movement',
+  G.isInsideBuilding(ib0.x - ib0.w / 2 + 0.15, ib0.z) &&
+  G.isInsideBuilding(ib0.x - 4, ib0.z + ib0.d / 2 - 0.15) &&
+  !G.isInsideBuilding(ib0.x, ib0.z + ib0.d / 2 - 0.15));
+const barGuests = G.NPCs.filter(n => n.barIdx !== undefined && !n.dead);
+check('every bar hosts its own crowd (' + barGuests.length + ' guests)',
+  barGuests.length >= 18);
+check('bars are full of sexy bikini dancers (' +
+  barGuests.filter(n => n.bikini).length + ')',
+  barGuests.filter(n => n.bikini).length >= 12);
+check('guests stay inside their bars',
+  barGuests.every(n => {
+    const b = G.interiorBars[n.barIdx];
+    return b && Math.abs(n.pos.x - b.x) <= b.w / 2 && Math.abs(n.pos.z - b.z) <= b.d / 2;
+  }));
+// the hero walks straight out through the front door
+G.respawn(); player.wanted = 0;
+player.pos.set(ib0.x, 0, ib0.z);
+player.group.position.copy(player.pos);
+step(2);
+key('KeyW'); step(90); keyup('KeyW');
+check('hero walks out of the bar through the front door',
+  player.pos.z > ib0.z + ib0.d / 2 + 0.6 && Math.abs(player.pos.x - ib0.x) < 1.8);
+// massacre the whole crowd → the bar refills about 10 s later
+G.respawn(); player.wanted = 0;
+const npcBeforeMassacre = G.NPCs.length;
+const victims = ib0.patrons.slice();
+victims.forEach(n => { n.dead = true; });
+step(2);
+check('a wiped-out bar waits for the next crowd', ib0.patrons.every(n => n.dead));
+step(300);   // ~5 s — still empty
+check('the bar stays empty before 10 s pass', ib0.patrons.every(n => n.dead));
+step(400);   // ~6.7 s more → total ~11.7 s
+check('~10 s after the massacre a fresh crowd fills the bar',
+  ib0.patrons.every(n => !n.dead && n.dance && n.hp > 0) &&
+  ib0.patrons.every(n => n.pos.distanceTo(new THREE.Vector3(ib0.x, 0, ib0.z)) < 9));
+check('the bar crowd respawns in place without growing the world population',
+  G.NPCs.length === npcBeforeMassacre);
 
 /* ================= TEST 13: bridge ramps aligned (world-group regression) ====== */
 // REGRESSION: `worldGroup.add(box).rotation.x = a` tilted the ENTIRE world,
@@ -544,6 +598,12 @@ check('character turns toward the strafe direction (sin facing≈-1)', Math.abs(
 
 /* ================= TEST 16: driving chase-cam + speedometer ===================== */
 const driver = G.cars.find(c => !c.dead && c.isPolice && !c.driver);
+// park the cruiser on the open spawn intersection so the carjack spot is
+// deterministic no matter how far traffic has driven by now
+driver.curSpeed = 0; driver.heading = 0; driver.laneOffset = 0; driver.stunT = 0;
+driver.pos.set(-52.5, 0, -52.5);
+driver.prevPos.copy(driver.pos);
+driver.group.position.copy(driver.pos);
 G.respawn();
 player.pos.set(driver.pos.x + 1.6, 0, driver.pos.z);
 player.group.position.copy(player.pos);
@@ -743,8 +803,8 @@ check('modern building facades start OPAQUE', modernFaded === 0);
 G.applyWorldStyle('neon');
 step(3);
 check('style switch rebuilds the city in VICE CITY neon mode', G.settings.style === 'neon' && G.isNeon() === true);
-check('style switch keeps the world alive (124 NPC + 34 xe + hero)',
-  !!player && !player.dead && G.NPCs.length === 141 && G.cars.length === 34);
+check('style switch keeps the world alive (142 NPC + 34 xe + hero)',
+  !!player && !player.dead && G.NPCs.length === 159 && G.cars.length === 34);
 const palmTrunks = countWorld(o => o.geometry.type === 'CylinderGeometry' && o.material &&
   o.material.color && o.material.color.getHex() === 0x7a5a38);
 check('VICE CITY palms return (' + palmTrunks + ' trunks)', palmTrunks >= 20);
@@ -759,7 +819,7 @@ check('neon building facades start OPAQUE (no transparent pipeline cost)', neonF
 G.applyWorldStyle('modern');
 step(3);
 check('style can switch back to UNITY CITY modern', G.settings.style === 'modern' && G.isNeon() === false &&
-  !!player && G.NPCs.length === 141 && G.cars.length === 34);
+  !!player && G.NPCs.length === 159 && G.cars.length === 34);
 G.setTimeOfDay('afternoon'); G.setWeather('clear'); step(2);
 check('modern mode restores the crisp daylight fog', G.scene.fog && G.scene.fog.color.getHex() === 0xbfd0de);
 
@@ -1603,7 +1663,7 @@ check('the moon is up and the stars are out', G.timeInfo.moon > 0.9 && G.timeInf
 G.applyWorldStyle('night'); step(3);
 check('GTA NIGHT style is selectable', G.settings.style === 'night' && G.isNeon() === true);
 check('GTA NIGHT keeps the world alive (124 NPC + 34 xe + hero)',
-  !!player && !player.dead && G.NPCs.length === 141 && G.cars.length === 34);
+  !!player && !player.dead && G.NPCs.length === 159 && G.cars.length === 34);
 const neonNight = countWorld(o => o.material && o.material.emissive &&
   (o.material.emissive.r + o.material.emissive.g + o.material.emissive.b) > 0.5);
 check('GTA NIGHT dresses the skyline in neon (' + neonNight + ' emissive)', neonNight >= 50);

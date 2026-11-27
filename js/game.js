@@ -1074,6 +1074,7 @@
   const buildingBoxes = [];   // AABB footprints {minX,maxX,minZ,maxZ}
   const buildingMeshes = [];  // for raycast LOS
   const bridgeDecks = [];     // raised bridge decks {minX,maxX,minZ,maxZ,h,mesh,fade,lastOp}
+  const blockMap = [];        // per-block city-map data {x,z,q,park,bar} for the wide minimap
   const lampBulbs = [];       // emissive lamp bulb materials (night glow)
   const neonSignMats = [];    // neon sign materials (brighten at night)
   const waterMats = [];       // animated water materials
@@ -1981,8 +1982,251 @@
     return bar;
   }
 
+  /* ---------------- Interior bars (3 walk-in venues inside city buildings) ----------------
+     Real rooms with a door gap in the wall, a glowing dance floor, disco lights
+     and dancing bikini girls. The hero (and fleeing NPCs) can walk in through
+     the door. Kill EVERYONE inside and a fresh crowd walks in ~10 seconds later. */
+  const interiorBars = [];
+  function makeDanceMaterial() {
+    const danceC = document.createElement('canvas');
+    danceC.width = 128; danceC.height = 128;
+    const dg = danceC.getContext('2d');
+    dg.fillStyle = '#241a30'; dg.fillRect(0, 0, 128, 128);
+    dg.fillStyle = 'rgba(255,63,164,0.85)';
+    for (let yy = 0; yy < 8; yy++) for (let xx = 0; xx < 8; xx++) {
+      if ((xx + yy) % 2 === 0) dg.fillRect(xx * 16, yy * 16, 16, 16);
+    }
+    const danceTex = new THREE.CanvasTexture(danceC);
+    return new THREE.MeshStandardMaterial({
+      map: danceTex, emissive: 0xffffff, emissiveMap: danceTex, emissiveIntensity: 0.6, roughness: 0.9
+    });
+  }
+  function buildInteriorBar(x, z, name, signColor) {
+    const W = 16, D = 11, wallH = 3.6, TH = 0.5;
+    const mx = x, mz = z;
+    const variant = ((x * 13 + z * 7) | 0);
+    const neon = isNeon();
+    const wallM = facadeMaterial(0x6a4a5a, variant, neon, 'conc');
+    const roofM = mat(0x2a2233, { roughness: 0.95 });
+    const emissiveMats = [];
+    // wooden club floor
+    const floor = plane(W, D, 0x6a4a2e, mx, 0.02, mz);
+    floor.receiveShadow = true;
+    worldGroup.add(floor);
+    // walls: the front (south) wall has a 2.4 m door gap in the middle
+    const wallBox = (w, t, px, pz) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, wallH, t), wallM);
+      mesh.position.set(px, wallH / 2, pz);
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      worldGroup.add(mesh);
+      buildingMeshes.push(mesh);
+      return mesh;
+    };
+    const DOOR = 2.4, HALF = (W - DOOR) / 2;
+    wallBox(W, TH, mx, mz - D / 2 + TH / 2);                                  // back (north)
+    wallBox(HALF - 0.2, TH, mx - DOOR / 2 - (HALF - 0.2) / 2, mz + D / 2 - TH / 2);  // front west of door
+    wallBox(HALF - 0.2, TH, mx + DOOR / 2 + (HALF - 0.2) / 2, mz + D / 2 - TH / 2);  // front east of door
+    wallBox(TH, D, mx - W / 2 + TH / 2, mz);                                  // west
+    wallBox(TH, D, mx + W / 2 - TH / 2, mz);                                  // east
+    // door jambs so people funnel through the gap
+    const jambM = mat(0x2a1c14, { roughness: 0.9 });
+    for (const s of [-1, 1]) {
+      const j = box(0.3, wallH, TH, 0x2a1c14, mx + s * (DOOR / 2 + 0.15), wallH / 2, mz + D / 2 - TH / 2);
+      j.material = jambM;
+      worldGroup.add(j); buildingMeshes.push(j);
+    }
+    // collision: thin wall strips only — the room itself stays walkable
+    const pushWall = (a, b, c, d) => {
+      buildingBoxes.push({
+        minX: a, maxX: b, minZ: c, maxZ: d, h: wallH + 0.45, cx: mx, cz: mz,
+        mats: [wallM, wallM], emissiveMats, fade: 1, lastOp: 1
+      });
+    };
+    pushWall(mx - W / 2, mx + W / 2, mz - D / 2, mz - D / 2 + TH);
+    pushWall(mx - W / 2, mx - W / 2 + TH, mz - D / 2, mz + D / 2);
+    pushWall(mx + W / 2 - TH, mx + W / 2, mz - D / 2, mz + D / 2);
+    pushWall(mx - W / 2, mx - DOOR / 2 - 0.2, mz + D / 2 - TH, mz + D / 2);
+    pushWall(mx + DOOR / 2 + 0.2, mx + W / 2, mz + D / 2 - TH, mz + D / 2);
+    pushWall(mx - DOOR / 2 - 0.35, mx - DOOR / 2 - 0.05, mz + D / 2 - TH, mz + D / 2);
+    pushWall(mx + DOOR / 2 + 0.05, mx + DOOR / 2 + 0.35, mz + D / 2 - TH, mz + D / 2);
+    // roof slab — a see-through deck for the chase-cam, like the beach bar
+    const roof = box(W + 0.6, 0.3, D + 0.6, 0x2a2233, mx, wallH + 0.15, mz);
+    roof.material = roofM; roof.castShadow = true;
+    worldGroup.add(roof);
+    bridgeDecks.push({
+      minX: mx - W / 2 - 0.4, maxX: mx + W / 2 + 0.4,
+      minZ: mz - D / 2 - 0.4, maxZ: mz + D / 2 + 0.4,
+      h: wallH + 0.5, mesh: roof, fade: 1, lastOp: 1
+    });
+    // lit shop windows along the street level (they glow after dark)
+    const storeM = storefrontMaterial(variant, neon);
+    emissiveMats.push(storeM);
+    const band = (w, t, px, pz) => {
+      const m2 = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, t), storeM);
+      m2.position.set(px, 0.6, pz);
+      worldGroup.add(m2);
+    };
+    band(W, TH + 0.02, mx, mz - D / 2 + TH / 2);
+    band(W - DOOR - 1, TH + 0.02, mx, mz + D / 2 - TH / 2);
+    band(TH + 0.02, D, mx - W / 2 + TH / 2, mz);
+    band(TH + 0.02, D, mx + W / 2 - TH / 2, mz);
+    // glowing checker dance floor
+    const danceM = makeDanceMaterial();
+    const dance = new THREE.Mesh(new THREE.PlaneGeometry(W - 4, D - 4.5), danceM);
+    dance.rotation.x = -Math.PI / 2;
+    dance.position.set(mx, 0.04, mz - 0.3);
+    dance.receiveShadow = true;
+    worldGroup.add(dance);
+    emissiveMats.push(danceM);
+    // drinks counter along the back wall + bottles + stools
+    const counter = box(6.5, 1.0, 0.8, 0x5a3a20, mx, 0.5, mz - D / 2 + 1.7);
+    counter.castShadow = true;
+    worldGroup.add(counter); buildingMeshes.push(counter);
+    worldGroup.add(box(6.9, 0.08, 1.0, 0x2a1c12, mx, 1.04, mz - D / 2 + 1.7));
+    worldGroup.add(box(6.5, 0.5, 0.3, 0x241c16, mx, 1.55, mz - D / 2 + 1.05));
+    const bottleCols = [0x3f9a4f, 0xc2a02e, 0x7a3ac2, 0xc23a2e, 0x3fe0ff];
+    for (let i = 0; i < 9; i++) {
+      const bot = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.34, 6),
+        mat(bottleCols[i % bottleCols.length], { roughness: 0.3 }));
+      bot.position.set(mx - 2.6 + i * 0.65, 1.28, mz - D / 2 + 1.05);
+      worldGroup.add(bot);
+    }
+    for (let i = 0; i < 4; i++) {
+      const stool = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.55, 8), mat(0x8a4a2a, { roughness: 0.8 }));
+      stool.position.set(mx - 2.4 + i * 1.6, 0.28, mz - D / 2 + 2.8);
+      worldGroup.add(stool);
+    }
+    // wall neon strips + hanging disco orbs + spinning mirror ball
+    const lights = [];
+    if (neon) {
+      for (const s of [-1, 1]) {
+        worldGroup.add(neonBox(4.5, 0.18, 0.1, NEON_COLS[(s + 1) % NEON_COLS.length], mx - W / 2 + 0.42, 2.3, mz + s * 2.2));
+        worldGroup.add(neonBox(4.5, 0.18, 0.1, NEON_COLS[(s + 2) % NEON_COLS.length], mx + W / 2 - 0.42, 2.3, mz + s * 2.2));
+        worldGroup.add(neonBox(0.1, 0.18, 4.5, NEON_COLS[(s + 3) % NEON_COLS.length], mx + s * 3, 2.3, mz - D / 2 + 0.42));
+      }
+    }
+    for (let i = 0; i < 3; i++) {
+      const lm = new THREE.MeshStandardMaterial({
+        color: 0xffffff, emissive: NEON_COLS[i], emissiveIntensity: 1.4, roughness: 0.4
+      });
+      const orb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), lm);
+      orb.position.set(mx + (i - 1) * 3.5, wallH - 0.35, mz - 1.5 + (i % 2) * 1.6);
+      worldGroup.add(orb);
+      lights.push({ mat: lm });
+    }
+    const ballM = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.25, metalness: 0.85 });
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), ballM);
+    ball.position.set(mx, wallH - 0.3, mz + 0.7);
+    worldGroup.add(ball);
+    // glowing neon sign over the door
+    const signTex = barSignTexture(name, signColor);
+    const signM = new THREE.MeshStandardMaterial({
+      map: signTex, emissive: 0xffffff, emissiveMap: signTex, emissiveIntensity: 1.15
+    });
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.9, 0.25), signM);
+    sign.position.set(mx, wallH + 0.62, mz + D / 2 - 0.15);
+    worldGroup.add(sign);
+    emissiveMats.push(signM);
+    const ib = {
+      x: mx, z: mz, w: W, d: D, h: wallH, name,
+      pos: new THREE.Vector3(mx, 0, mz), lights, ball,
+      patrons: [], respawnT: 0,
+      beat: { playing: false, next: 0 }
+    };
+    interiorBars.push(ib);
+    return ib;
+  }
+  function buildInteriorBars() {
+    interiorBars.length = 0;
+    const gx = (bi) => (cx(bi) + cx(bi + 1)) / 2;   // block centre x
+    const gz = (bj) => (cz(bj) + cz(bj + 1)) / 2;   // block centre z
+    buildInteriorBar(gx(3), gz(2), 'DISCO', 0x3fe0ff);
+    buildInteriorBar(gx(8), gz(2), 'CLUB', 0xffd23f);
+    buildInteriorBar(gx(3), gz(8), 'BAR', 0xff3fa4);
+  }
+  // a fresh crowd inside one bar: 4 sexy bikini dancers + 2 party people
+  function spawnInteriorPatrons(ib) {
+    const prng = mulberry32(1234000 + interiorBars.indexOf(ib) * 7);
+    ib.patrons.length = 0;
+    for (let i = 0; i < 6; i++) {
+      const n = makeNPC('civilian', i < 4 ? 'bikini' : 'party');
+      n.dance = true; n.state = 'dance';
+      n.pos.set(ib.x + (prng() * 2 - 1) * (ib.w / 2 - 1.6), 0, ib.z + (prng() * 2 - 1) * (ib.d / 2 - 1.6));
+      n.group.position.copy(n.pos);
+      n.home = n.pos.clone(); n.target = null;
+      n.mood = prng() < 0.5 ? 'happy' : 'laugh';
+      n.barIdx = interiorBars.indexOf(ib);
+      ib.patrons.push(n);
+    }
+    ib.respawnT = 0;
+  }
+  // everybody in the bar is dead → after ~10 s the same patrons rise as a
+  // brand-new crowd (objects are revived so the world population stays stable)
+  function reviveInteriorBar(ib) {
+    const prng = mulberry32(700000 + interiorBars.indexOf(ib) * 13);
+    for (const n of ib.patrons) {
+      const parts = n.group.userData.parts;
+      parts.forEach(p => {
+        if (p.material) {
+          p.material.transparent = false;
+          p.material.opacity = 1;
+          p.material.depthWrite = true;
+        }
+      });
+      const ci = corpses.indexOf(n);
+      if (ci >= 0) corpses.splice(ci, 1);
+      scene.add(n.group);
+      n.group.visible = true;
+      n.dead = false; n.gone = false; n.deathT = 0;
+      n.hp = n.maxHp;
+      n.dance = true; n.state = 'dance';
+      n.fleeT = 0; n.path = [];
+      n.pos.set(ib.x + (prng() * 2 - 1) * (ib.w / 2 - 1.6), 0, ib.z + (prng() * 2 - 1) * (ib.d / 2 - 1.6));
+      n.group.position.copy(n.pos);
+      n.group.rotation.set(0, n.facing, 0);
+      n.home = n.pos.clone(); n.target = null;
+      n.mood = prng() < 0.5 ? 'happy' : 'laugh';
+      parts.forEach(p => { if (hittables.indexOf(p) < 0) hittables.push(p); });
+    }
+    ib.respawnT = 0;
+  }
+  function updateInteriorBars(dt) {
+    const t = performance.now();
+    for (let k = 0; k < interiorBars.length; k++) {
+      const ib = interiorBars[k];
+      for (let i = 0; i < ib.lights.length; i++) {
+        const L = ib.lights[i];
+        L.mat.emissive.setHex(NEON_COLS[Math.floor(t / 260 + i * 1.7 + k * 2) % NEON_COLS.length]);
+      }
+      ib.ball.rotation.y += dt * 1.2;
+      // a thumping beat while the hero is in or near the venue
+      if (player && !player.dead && Sfx.ctx) {
+        const inside = Math.abs(player.pos.x - ib.x) < ib.w / 2 && Math.abs(player.pos.z - ib.z) < ib.d / 2;
+        const d = player.pos.distanceTo(ib.pos);
+        if ((inside || d < 26) && !ib.beat.playing) { ib.beat.playing = true; ib.beat.next = 0; }
+        else if (!inside && d > 36 && ib.beat.playing) ib.beat.playing = false;
+        if (ib.beat.playing) {
+          const now = Sfx.ctx.currentTime;
+          if (now >= ib.beat.next) {
+            Sfx.tone(52, 0.14, 'sine', 0.45, 34);
+            Sfx.noise(0.03, 0.08, 7000);
+            ib.beat.next = now + 0.5;
+          }
+        }
+      }
+      // wiped out? a fresh crowd arrives ~10 seconds later
+      if (ib.patrons.length && ib.patrons.every(n => n.dead)) {
+        ib.respawnT += dt;
+        if (ib.respawnT >= 10) reviveInteriorBar(ib);
+      } else {
+        ib.respawnT = 0;
+      }
+    }
+  }
+
   function buildCity() {
     if (built) return;
+    blockMap.length = 0;
     const C = STYLES[settings.style];
     const neon = isNeon();
     /* sand island frame around the city base (edge-to-edge, no coplanar overlap) */
@@ -2100,11 +2344,24 @@
     const sidewalkMat = new THREE.MeshStandardMaterial({ map: sidewalkTexture(C.sidewalk), roughness: 0.95 });
     sidewalkMat.map.repeat.set(BLOCK / 8, BLOCK / 8);
     const curbMat = mat(neon ? 0x9a8a92 : 0x9fa4aa, { roughness: 0.95 });
+    // build the three walk-in interior bars BEFORE the block loop so their
+    // blocks are kept clear of normal buildings
+    buildInteriorBars();
     for (let bi = 0; bi < N; bi++) for (let bj = 0; bj < N; bj++) {
       const minX = cx(bi) + ROAD / 2, maxX = cx(bi + 1) - ROAD / 2;
       const minZ = cz(bj) + ROAD / 2, maxZ = cz(bj + 1) - ROAD / 2;
       // no buildings inside the river
       if (!(maxZ < RIVER_Z - RIVER_HALF || minZ > RIVER_Z + RIVER_HALF)) continue;
+      // record the block for the wide city map (quarter / park / bar venue)
+      const bxc = (minX + maxX) / 2, bzc = (minZ + maxZ) / 2;
+      const bm = {
+        x: bxc, z: bzc,
+        q: bzc < RIVER_Z ? (bxc < 0 ? 'nw' : 'ne') : (bxc < 0 ? 'sw' : 'se'),
+        park: false, bar: false
+      };
+      blockMap.push(bm);
+      const barHere = interiorBars.find(ib =>
+        Math.abs(bxc - ib.x) < ib.w / 2 + 3 && Math.abs(bzc - ib.z) < ib.d / 2 + 3);
       const sw = new THREE.Mesh(new THREE.PlaneGeometry(BLOCK, BLOCK), sidewalkMat);
       sw.rotation.x = -Math.PI / 2;
       sw.position.set((minX + maxX) / 2, 0.02, (minZ + maxZ) / 2);
@@ -2119,6 +2376,18 @@
       ];
       const curbs = mergeBoxes(curbSpecs, curbMat);
       worldGroup.add(curbs);
+      // an interior bar owns this block: the SAME random lot rolls still run
+      // (keeping the world generation stream byte-identical), then everything
+      // this lot generated is stripped so the venue stands alone on the block
+      const keepI = {
+        w: worldGroup.children.length,
+        b: buildingBoxes.length,
+        m: buildingMeshes.length,
+        n: neonSignMats.length,
+        p: _lampPoles.length,
+        h: _lampHeads.length,
+        s: _lampBulbSpecs.length
+      };
 
       // simple lot layout
       const gap = 1.2;
@@ -2144,6 +2413,7 @@
         else { addTree(midX + 4, midZ + 4); addTree(inner.maxX - 2.5, inner.minZ + 2.5); }
       } else {
         // park block: lawn, trees, benches, lamp
+        bm.park = !barHere;
         const grassMat = new THREE.MeshStandardMaterial({ map: grassTexture(C.grass), roughness: 1 });
         grassMat.map.repeat.set(3, 3);
         const gx = (inner.minX + inner.maxX) / 2, gz = (inner.minZ + inner.maxZ) / 2;
@@ -2158,6 +2428,16 @@
         }
         addBench(gx - 2, gz + 2, rng() * Math.PI);
         addLamp(gx + 1, gz - 1);
+      }
+      if (barHere) {
+        worldGroup.children.length = keepI.w;
+        buildingBoxes.length = keepI.b;
+        buildingMeshes.length = keepI.m;
+        neonSignMats.length = keepI.n;
+        _lampPoles.length = keepI.p;
+        _lampHeads.length = keepI.h;
+        _lampBulbSpecs.length = keepI.s;
+        bm.bar = true;
       }
     }
 
@@ -4100,6 +4380,9 @@
         n.target = null; n.wanderTimer = 0;
       }
     }
+
+    // ---- walk-in interior bars: bikini dancers + party crowd inside the rooms ----
+    for (const ib of interiorBars) spawnInteriorPatrons(ib);
 
     spawned = true;
   }
@@ -6782,45 +7065,113 @@
     const g = mmapStatic.getContext('2d');
     const C = STYLES[settings.style];
     const hex = (c) => '#' + new THREE.Color(c).getHexString();
-    g.fillStyle = '#0e1218'; g.fillRect(0, 0, mmapStatic.width, mmapStatic.height);
     const W2 = (x) => (x + GROUND_HALF) * mScale;
-    g.fillStyle = hex(C.ground); g.fillRect(W2(-GROUND_HALF), W2(-GROUND_HALF), CITY * mScale, CITY * mScale);
+    const s = mScale;
+    const Wpx = mmapStatic.width, Hpx = mmapStatic.height;
+    // deep open ocean
+    g.fillStyle = '#0a121c';
+    g.fillRect(0, 0, Wpx, Hpx);
+    // shallow swimming band around the island
+    g.fillStyle = hex(C.shallow);
+    g.fillRect(W2(-GROUND_HALF - SEA_BAND), W2(-GROUND_HALF - SEA_BAND),
+      (GROUND_HALF + SEA_BAND) * 2 * s, (GROUND_HALF + SEA_BAND) * 2 * s);
+    // sandy island ring (the beach)
+    g.fillStyle = hex(C.sand);
+    g.fillRect(W2(-GROUND_HALF), W2(-GROUND_HALF), GROUND_HALF * 2 * s, GROUND_HALF * 2 * s);
+    // city ground base
+    g.fillStyle = hex(C.ground);
+    g.fillRect(W2(-CITY / 2), W2(-CITY / 2), CITY * s, CITY * s);
+    // district tints: the four quarters read at a glance, like a GTA IV map
+    const QS = {
+      nw: { x0: -CITY / 2, z0: -CITY / 2, x1: 0, z1: RIVER_Z, name: 'KHU BÊ TÔNG' },
+      ne: { x0: 0, z0: -CITY / 2, x1: CITY / 2, z1: RIVER_Z, name: 'KHU GẠCH' },
+      sw: { x0: -CITY / 2, z0: RIVER_Z, x1: 0, z1: CITY / 2, name: 'PHỐ CỔ' },
+      se: { x0: 0, z0: RIVER_Z, x1: CITY / 2, z1: CITY / 2, name: 'TRUNG TÂM' }
+    };
+    for (const k of ['nw', 'ne', 'sw', 'se']) {
+      const r = QS[k];
+      g.fillStyle = hex(C.districtPals[k][0]);
+      g.globalAlpha = 0.28;
+      g.fillRect(W2(r.x0), W2(r.z0), (r.x1 - r.x0) * s, (r.z1 - r.z0) * s);
+      g.globalAlpha = 1;
+    }
+    // parks: green lawns inside the blocks
+    g.fillStyle = hex(C.grass);
+    for (const b of blockMap) {
+      if (b.park) g.fillRect(W2(b.x - BLOCK / 2 + 1.6), W2(b.z - BLOCK / 2 + 1.6), (BLOCK - 3.2) * s, (BLOCK - 3.2) * s);
+    }
+    // street grid
     g.fillStyle = hex(C.road);
     for (let i = 0; i <= N; i++) {
-      g.fillRect(W2(cx(i) - ROAD / 2), W2(-CITY / 2), ROAD * mScale, CITY * mScale);
-      g.fillRect(W2(-CITY / 2), W2(cz(i) - ROAD / 2), CITY * mScale, ROAD * mScale);
+      g.fillRect(W2(cx(i) - ROAD / 2), W2(-CITY / 2), ROAD * s, CITY * s);
+      g.fillRect(W2(-CITY / 2), W2(cz(i) - ROAD / 2), CITY * s, ROAD * s);
     }
     // river over the roads...
     g.fillStyle = hex(C.water);
-    g.fillRect(W2(-CITY / 2), W2(RIVER_Z - RIVER_HALF), CITY * mScale, RIVER_HALF * 2 * mScale);
+    g.fillRect(W2(-CITY / 2), W2(RIVER_Z - RIVER_HALF), CITY * s, RIVER_HALF * 2 * s);
     // ...then bridge stripes where avenues cross
     g.fillStyle = hex(C.bridge);
     for (let i = 0; i <= N; i++) {
-      g.fillRect(W2(cx(i) - ROAD / 2), W2(RIVER_Z - RIVER_HALF), ROAD * mScale, RIVER_HALF * 2 * mScale);
+      g.fillRect(W2(cx(i) - ROAD / 2), W2(RIVER_Z - RIVER_HALF), ROAD * s, RIVER_HALF * 2 * s);
     }
     // the beach bar glows pink on the sand
     if (bar) {
       g.fillStyle = '#ff4fa0';
-      g.fillRect(W2(bar.x - 7.5), W2(bar.z - 5.5), 15 * mScale, 11 * mScale);
+      g.fillRect(W2(bar.x - 7.5), W2(bar.z - 5.5), 15 * s, 11 * s);
     }
+    // the three walk-in interior bars glow gold on their blocks
+    for (const ib of interiorBars) {
+      g.fillStyle = '#ffd25e';
+      g.fillRect(W2(ib.x - ib.w / 2), W2(ib.z - ib.d / 2), ib.w * s, ib.d * s);
+      g.strokeStyle = '#120a1c';
+      g.lineWidth = 1;
+      g.strokeRect(W2(ib.x - ib.w / 2), W2(ib.z - ib.d / 2), ib.w * s, ib.d * s);
+    }
+    // district name plates + compass, street-map style
+    g.textAlign = 'center';
+    g.font = 'bold ' + Math.max(9, Math.round(Hpx / 26)) + 'px monospace';
+    for (const k of ['nw', 'ne', 'sw', 'se']) {
+      const r = QS[k];
+      const lx = W2((r.x0 + r.x1) / 2), lz = W2((r.z0 + r.z1) / 2);
+      g.fillStyle = 'rgba(0,0,0,0.65)';
+      g.fillText(r.name, lx + 1, lz + 1);
+      g.fillStyle = 'rgba(244,248,255,0.92)';
+      g.fillText(r.name, lx, lz);
+    }
+    // compass arrow (north = up) in the top-left corner
+    const cx0 = 15, cy0 = 19;
+    g.fillStyle = '#ffd25e';
+    g.beginPath();
+    g.moveTo(cx0, cy0 - 7);
+    g.lineTo(cx0 - 4, cy0 + 2);
+    g.lineTo(cx0 + 4, cy0 + 2);
+    g.closePath();
+    g.fill();
+    g.font = 'bold 9px monospace';
+    g.fillStyle = '#fff';
+    g.fillText('N', cx0, cy0 + 12);
+    // neat border frame
+    g.strokeStyle = 'rgba(0,0,0,0.85)';
+    g.lineWidth = 2;
+    g.strokeRect(1, 1, Wpx - 2, Hpx - 2);
   }
   function updateMinimap() {
     mctx.drawImage(mmapStatic, 0, 0);
     const W2 = (x) => (x + GROUND_HALF) * mScale;
     const dot = (x, z, c, r) => { mctx.fillStyle = c; mctx.fillRect(W2(x) - r / 2, W2(z) - r / 2, r, r); };
-    cars.forEach(c => { if (!c.dead) dot(c.group.position.x, c.group.position.z, c.isPolice ? '#6af' : '#fc3', 3); });
-    boats.forEach(b => dot(b.pos.x, b.pos.z, '#7ef', 3));
-    sharks.forEach(sh => dot(sh.pos.x, sh.pos.z, '#ff4a4a', 3));
-    NPCs.forEach(n => { if (!n.dead) dot(n.pos.x, n.pos.z, n.type === 'police' ? '#35f' : (n.type === 'enemy' ? '#f44' : '#5c5'), 2); });
+    cars.forEach(c => { if (!c.dead) dot(c.group.position.x, c.group.position.z, c.isPolice ? '#6af' : '#fc3', 4); });
+    boats.forEach(b => dot(b.pos.x, b.pos.z, '#7ef', 4));
+    sharks.forEach(sh => dot(sh.pos.x, sh.pos.z, '#ff4a4a', 4));
+    NPCs.forEach(n => { if (!n.dead) dot(n.pos.x, n.pos.z, n.type === 'police' ? '#35f' : (n.type === 'enemy' ? '#f44' : '#5c5'), 3); });
     // mission target: a pulsing yellow ring + navigation arrow on the minimap
     if (mission && mission.active && mission.target && typeof updateMission === 'function') {
       const t = missionTargetPos();
       if (t && player) {
         const pulse = 3 + Math.sin(performance.now() / 160) * 2;
         mctx.strokeStyle = '#ffd25e';
-        mctx.lineWidth = 2;
+        mctx.lineWidth = 2.5;
         mctx.beginPath();
-        mctx.arc(W2(t.x), W2(t.z), 4 + pulse, 0, Math.PI * 2);
+        mctx.arc(W2(t.x), W2(t.z), 6 + pulse * 1.6, 0, Math.PI * 2);
         mctx.stroke();
         // route line + arrowhead from the hero to the objective
         const px = W2(player.pos.x), pz = W2(player.pos.z);
@@ -6833,9 +7184,9 @@
         const ang = Math.atan2(tz - pz, tx - px);
         mctx.beginPath();
         mctx.moveTo(tx, tz);
-        mctx.lineTo(tx - Math.cos(ang - 0.45) * 8, tz - Math.sin(ang - 0.45) * 8);
+        mctx.lineTo(tx - Math.cos(ang - 0.45) * 11, tz - Math.sin(ang - 0.45) * 11);
         mctx.moveTo(tx, tz);
-        mctx.lineTo(tx - Math.cos(ang + 0.45) * 8, tz - Math.sin(ang + 0.45) * 8);
+        mctx.lineTo(tx - Math.cos(ang + 0.45) * 11, tz - Math.sin(ang + 0.45) * 11);
         mctx.stroke();
         mctx.globalAlpha = 1;
       }
@@ -6849,9 +7200,9 @@
       const sx = -fz, sz = fx;
       mctx.fillStyle = '#fff';
       mctx.beginPath();
-      mctx.moveTo(px + fx * 7, pz + fz * 7);
-      mctx.lineTo(px - fx * 3 + sx * 4, pz - fz * 3 + sz * 4);
-      mctx.lineTo(px - fx * 3 - sx * 4, pz - fz * 3 - sz * 4);
+      mctx.moveTo(px + fx * 9, pz + fz * 9);
+      mctx.lineTo(px - fx * 4 + sx * 5, pz - fz * 4 + sz * 5);
+      mctx.lineTo(px - fx * 4 - sx * 5, pz - fz * 4 - sz * 5);
       mctx.closePath();
       mctx.fill();
     }
@@ -7182,6 +7533,7 @@
 
     updateFX(dt);
     updateBarFX(dt);
+    updateInteriorBars(dt);
     updateCamera(dt);
     updateVehicleHUD();
     updateReloadHUD();
@@ -7474,7 +7826,7 @@
     get camera() { return camera; }, get scene() { return scene; },
     get world() { return worldGroup; },
     N, RIVER_Z, RIVER_HALF, isInsideBuilding, isInsideWater, groundY,
-    buildingBoxes, CITY_CORES,
+    buildingBoxes, CITY_CORES, interiorBars, blockMap,
     // third-person camera test hooks
     aim: () => aimInfo(),
     setCameraLook(yaw, pitch) {
